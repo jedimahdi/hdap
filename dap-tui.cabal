@@ -1,0 +1,93 @@
+cabal-version:      2.4
+name:               dap-tui
+version:            0.1.0.0
+synopsis:
+
+-- A longer description of the package.
+-- description:
+homepage:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+license:            NONE
+author:             Mahdi Seyedan
+maintainer:         mahdi.se@yahoo.com
+
+-- A copyright notice.
+-- copyright:
+category:           Development
+extra-source-files: CHANGELOG.md
+
+library
+    exposed-modules:  MyLib
+                      Utils
+                      Cli
+                      Dap
+                      Dap.Session
+                      Dap.Parse
+                      Dap.Protocol
+                      Dap.Request
+                      Dap.Types
+
+
+    -- Modules included in this library but not exported.
+    -- other-modules:
+
+    -- LANGUAGE extensions used by modules in this package.
+    -- other-extensions:
+    build-depends:    base ^>=4.16.4.0
+                    , network-simple
+                    , network
+                    , text
+                    , bytestring
+                    , containers
+                    , aeson
+                    , process
+                    , attoparsec
+                    , attoparsec-aeson
+                    , case-insensitive
+                    , transformers
+                    , async
+                    , unliftio
+                    , vector
+                    , stm
+                    , microlens
+                    , microlens-th
+                    , microlens-aeson
+                    , microlens-mtl
+                    , scientific
+                    , filepath
+                    , pretty-simple
+                    , safe-exceptions
+                    , streamly
+                    , streamly-core
+                    , word8
+                    , prettyprinter
+                    , indexed-traversable
+                    , brick
+                    , vty
+                    , websockets
+                    , haskell-dap
+    hs-source-dirs:   src
+    default-language: GHC2021
+    ghc-options: -Wall -Wno-unused-imports -Wno-missing-export-lists -Wno-name-shadowing
+    default-extensions: OverloadedStrings
+                        BlockArguments
+                        LambdaCase
+
+executable dap-tui
+    main-is:          Main.hs
+    build-depends:
+        base ^>=4.16.4.0,
+        dap-tui
+
+    ghc-options: -threaded
+    hs-source-dirs:   app
+    default-language: GHC2021
+
+test-suite dap-tui-test
+    default-language: GHC2021
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          MyLibTest.hs
+    build-depends:    base ^>=4.16.4.0
