@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module Dap.Event where
 
 import Dap.Protocol
@@ -13,9 +11,6 @@ import Data.Attoparsec.ByteString.Lazy (Parser)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector qualified as Vector
-import Lens.Micro
-import Lens.Micro.Aeson
-import Lens.Micro.TH
 import Network.WebSockets.Stream qualified as Stream
 import System.FilePath (takeDirectory, takeFileName)
 import UnliftIO.STM
@@ -24,16 +19,15 @@ import Utils
 type EventId = Int
 
 data Event = Event
-  { _eventSeq :: EventId
-  , _eventEvent :: Text
-  , _eventBody :: Maybe Value
+  { id :: EventId
+  , event :: Text
+  , body :: Maybe Value
   }
   deriving (Show)
-makeLenses ''Event
 
 instance FromJSON Event where
   parseJSON = withObject "Event" $ \obj -> do
-    _eventSeq <- obj .: "seq"
-    _eventEvent <- obj .: "event"
-    _eventBody <- obj .:? "body"
+    id <- obj .: "seq"
+    event <- obj .: "event"
+    body <- obj .:? "body"
     pure $ Event {..}

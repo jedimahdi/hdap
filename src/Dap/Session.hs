@@ -1,9 +1,7 @@
 {-# HLINT ignore "Use newtype instead of data" #-}
 {-# HLINT ignore "Redundant pure" #-}
-{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
@@ -33,9 +31,6 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
-import Lens.Micro
-import Lens.Micro.Aeson
-import Lens.Micro.TH
 import Network.Simple.TCP
 import Network.Simple.TCP qualified as TCP
 import Network.WebSockets.Stream (Stream)
@@ -48,31 +43,29 @@ import Prelude hiding (seq)
 
 type ResponseCallback = Response -> IO ()
 
-data DapThread = DapThread
-  { _threadId :: Int
-  , _threadName :: Text
-  , _stopped :: Bool
+data ThreadState = ThreadState
+  { id :: Int
+  , name :: Text
+  , stopped :: Bool
   }
-makeLenses ''DapThread
 
 data Session = Session
-  { _sessionId :: !Int
-  , _nextRequestId :: !(TVar RequestId)
-  , _messageCallbacks :: !(TVar (Map RequestId (Maybe ResponseCallback)))
-  , _sessionSocket :: !TCP.Socket
-  , _sessionThreads :: !(TVar (Map Int DapThread))
-  , _isInitialized :: !(TVar Bool)
-  , _msgOutChan :: !(TQueue MsgOut)
-  , _msgInChan :: !(TQueue MsgIn)
-  , _sessionStream :: !Stream
+  { id :: !Int
+  , nextRequestId :: !(TVar RequestId)
+  , messageCallbacks :: !(TVar (Map RequestId (Maybe ResponseCallback)))
+  , socket :: !TCP.Socket
+  , threads :: !(TVar (Map Int ThreadState))
+  , isInitialized :: !(TVar Bool)
+  , msgOutChan :: !(TQueue MsgOut)
+  , msgInChan :: !(TQueue MsgIn)
+  , stream :: !Stream
   }
-makeLenses ''Session
 
 instance Eq Session where
-  s1 == s2 = s1 ^. sessionId == s2 ^. sessionId
+  s1 == s2 = s1.id == s2.id
 
 instance Show Session where
-  show s = "<Session " ++ show (s ^. sessionId) ++ ">"
+  show s = "<Session " ++ show s.id ++ ">"
 
 newSession :: MonadIO m => Int -> TCP.Socket -> m Session
 newSession sessionId socket = do
@@ -86,24 +79,24 @@ newSession sessionId socket = do
   msgIn <- atomically newTQueue
   pure
     $ Session
-      { _sessionId = sessionId
-      , _nextRequestId = nextRequestId
-      , _messageCallbacks = messageCallbacks
-      , _sessionSocket = socket
-      , _sessionThreads = threads
-      , _isInitialized = isInitialized
-      , _msgOutChan = msgOut
-      , _msgInChan = msgIn
-      , _sessionStream = stream
+      { id = sessionId
+      , nextRequestId = nextRequestId
+      , messageCallbacks = messageCallbacks
+      , socket = socket
+      , threads = threads
+      , isInitialized = isInitialized
+      , msgOutChan = msgOut
+      , msgInChan = msgIn
+      , stream = stream
       }
 
 addCallback :: MonadIO m => Session -> RequestId -> ResponseCallback -> m ()
 addCallback session requestId callback =
-  atomically $ modifyTVar' (session ^. messageCallbacks) (Map.insert requestId (Just callback))
+  atomically $ modifyTVar' session.messageCallbacks (Map.insert requestId (Just callback))
 
 callCallback :: MonadIO m => Session -> RequestId -> Response -> m ()
 callCallback session requestId value = do
-  let messageCallbacksVar = session ^. messageCallbacks
+  let messageCallbacksVar = session.messageCallbacks
   callbackMap <- atomically $ do
     originalMap <- readTVar messageCallbacksVar
     writeTVar messageCallbacksVar (Map.insert requestId Nothing originalMap)
@@ -114,11 +107,11 @@ callCallback session requestId value = do
     _ -> pure ()
 
 addMsgOut :: MonadIO m => Session -> MsgOut -> m ()
-addMsgOut session msg = atomically $ writeTQueue (session ^. msgOutChan) msg
+addMsgOut session msg = atomically $ writeTQueue session.msgOutChan msg
 
 sendRequest :: MonadIO m => Session -> (RequestId -> Request) -> ResponseCallback -> m ()
 sendRequest session mkRequest callback = do
-  let nextRequestIdVar = session ^. nextRequestId
+  let nextRequestIdVar = session.nextRequestId
   requestId <- atomically $ do
     n <- readTVar nextRequestIdVar
     writeTVar nextRequestIdVar (n + 1)

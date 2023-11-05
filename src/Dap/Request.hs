@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module Dap.Request where
 
 import Data.Aeson
@@ -10,20 +8,16 @@ import Data.Aeson.Types (Object)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector qualified as Vector
-import Lens.Micro
-import Lens.Micro.Aeson
-import Lens.Micro.TH
 import System.FilePath (takeDirectory, takeFileName)
 
 type RequestId = Int
 
 data Request = Request
-  { _requestSeq :: RequestId
-  , _requestArguments :: Maybe Value
-  , _requestCommand :: Text
+  { id :: RequestId
+  , arguments :: Maybe Value
+  , command :: Text
   }
   deriving (Show)
-makeLenses ''Request
 
 instance ToJSON Request where
   toJSON (Request i margs command) =
@@ -40,25 +34,25 @@ instance ToJSON Request where
 
 instance FromJSON Request where
   parseJSON = withObject "Request" $ \obj -> do
-    _requestSeq <- obj .: "seq"
-    _requestCommand <- obj .: "command"
-    _requestArguments <- obj .:? "arguments"
+    id <- obj .: "seq"
+    command <- obj .: "command"
+    arguments <- obj .:? "arguments"
     pure $ Request {..}
 
 makeRequest :: Text -> Value -> RequestId -> Request
 makeRequest command arguments requestId =
   Request
-    { _requestSeq = requestId
-    , _requestCommand = command
-    , _requestArguments = Just arguments
+    { id = requestId
+    , command = command
+    , arguments = Just arguments
     }
 
 makeRequest' :: Text -> RequestId -> Request
 makeRequest' command requestId =
   Request
-    { _requestSeq = requestId
-    , _requestCommand = command
-    , _requestArguments = Nothing
+    { id = requestId
+    , command = command
+    , arguments = Nothing
     }
 
 makeStackTraceRequest :: Int -> RequestId -> Request

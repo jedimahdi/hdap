@@ -47,10 +47,6 @@ library
                     , unliftio
                     , vector
                     , stm
-                    , microlens
-                    , microlens-th
-                    , microlens-aeson
-                    , microlens-mtl
                     , scientific
                     , filepath
                     , pretty-simple
@@ -59,7 +55,6 @@ library
                     , prettyprinter
                     , indexed-traversable
                     , websockets
-                    , haskell-dap
     hs-source-dirs:   src
     default-language: GHC2021
     ghc-options: -Wall -Wno-unused-imports -Wno-missing-export-lists -Wno-name-shadowing

@@ -22,9 +22,6 @@ import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (listToMaybe)
 import Data.Text qualified as T
-import Lens.Micro
-import Lens.Micro.Aeson
-import Lens.Micro.TH
 import Network.Simple.TCP qualified as TCP
 import Network.WebSockets.Stream (Stream)
 import Network.WebSockets.Stream qualified as Stream

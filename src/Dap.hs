@@ -24,9 +24,6 @@ import Data.Functor (void)
 import Data.Map qualified as Map
 import Data.Text
 import Data.Text qualified as T
-import Haskell.DAP qualified as DAP
-import Lens.Micro
-import Lens.Micro.Aeson
 import Network.Simple.TCP qualified as TCP
 import Network.WebSockets.Stream qualified as Stream
 import System.FilePath (takeDirectory)
@@ -41,7 +38,7 @@ initialize env args = do
   liftIO $ putStrLn $ "Connection established to " ++ show remoteAddr ++ " Socket: " <> show socket
   sessionId <- getNextSessionId env
   session <- newSession sessionId socket
-  let sessionVar = env ^. envSession
+  let sessionVar = env.session
   atomically $ writeTVar sessionVar (Just session)
   void $ liftIO $ do
     void $ async $ MsgOut.app session
@@ -58,7 +55,7 @@ initialize env args = do
 
 getNextSessionId :: MonadIO m => DapEnv -> m Int
 getNextSessionId env = do
-  let nextSessionIdVar = env ^. nextSessionId
+  let nextSessionIdVar = env.nextSessionId
   atomically $ do
     i <- readTVar nextSessionIdVar
     writeTVar nextSessionIdVar (i + 1)
@@ -66,26 +63,23 @@ getNextSessionId env = do
 
 handleMsg :: DapEnv -> Session -> IO ()
 handleMsg env session = forever $ do
-  let msgIns = session ^. msgInChan
+  let msgIns = session.msgInChan
   msg <- atomically $ readTQueue msgIns
   case msg of
     ResponseMsg response -> do
-      let responseRequestId = response ^. responseRequestSeq
-      let command = response ^. responseCommand
-      putStrLn $ show session ++ ": Response to " ++ show command
+      putStrLn $ show session ++ ": Response to " ++ show response.command
       print response
-      callCallback session responseRequestId response
+      callCallback session response.requestId response
     EventMsg event -> do
-      let eventType = event ^. eventEvent
+      let eventType = event.event
       when (eventType /= "output" && eventType /= "loadedSource") $ do
         putStrLn $ show session ++ ": Event " ++ show eventType
         print event
       callEventCallback env session eventType event
     RequestMsg request -> do
-      let command = request ^. requestCommand
-      putStrLn $ show session ++ ": Reverse Request " ++ show command
+      putStrLn $ show session ++ ": Reverse Request " ++ show request.command
       print request
-      callHandleReverseRequest env command request
+      callHandleReverseRequest env request.command request
 
 setupEvents :: MonadIO m => DapEnv -> m ()
 setupEvents env = do
@@ -94,25 +88,25 @@ setupEvents env = do
     sendRequest session (makeSetBreakpointsRequest filePath [2]) $ \_ -> do
       sendRequest session makeSetExceptionBreakpointsRequest $ \_ -> do
         sendRequest session makeConfigurationDone $ \_ -> do
-          atomically $ writeTVar (session ^. isInitialized) True
-          atomically $ writeTVar (env ^. envSession) (Just session)
+          atomically $ writeTVar session.isInitialized True
+          atomically $ writeTVar env.session (Just session)
 
   on env "stopped" $ \(event, session) -> do
-    -- allThreadsStopped <- throwNothing $ event ^? eventBody . _Just . key "allThreadsStopped" . _Bool
-    putStrLn "before everything"
-    threadId :: Int <- throwNothing $ event ^? eventBody . _Just . key "threadId" . _Number . _Integral
-    putStrLn "before updateThreads"
+    rawBody <- throwNothing event.body
+    body <- throwNothing $ fromJSONValue @StoppedEventBody rawBody
+    threadId <- throwNothing body.threadId
     updateThreads session
-    putStrLn "After updateThreads"
     sendRequest session (makeStackTraceRequest threadId) $ \response -> do
-      body <- throwNothing $ response ^. responseBody
-      stackTraceResponseBody <- throwNothing $ fromJSONValue @DAP.StackTraceResponseBody body
-      let frames = DAP.stackFramesStackTraceResponseBody stackTraceResponseBody
+      rawBody <- throwNothing event.body
+      body <- throwNothing $ fromJSONValue @StackTraceResponseBody rawBody
+      let frames = body.stackFrames
       pure ()
 
   handleReverseRequest env "startDebugging" $ \request -> do
-    configuration <- throwNothing $ request ^? requestArguments . _Just . key "configuration" . _Object
-    requestType <- throwNothing $ request ^? requestArguments . _Just . key "request"
+    rawArgs <- throwNothing request.arguments
+    args <- throwNothing $ fromJSONValue @StartDebuggingRequestArguments rawArgs
+    let configuration = args.configuration
+    let requestType = String args.request
     let fullConfig = KeyMap.insert "request" requestType configuration
     initialize env (Object fullConfig)
 
@@ -124,31 +118,31 @@ updateThreads session =
   sendRequest session makeThreadsRequest $ \response -> do
     putStrLn "i have respose wtf"
     void $ runMaybeT $ do
-      body <- hoistMaybe response._responseBody >>= hoistMaybe . fromJSONValue @ThreadsResponseBody
+      body <- hoistMaybe response.body >>= hoistMaybe . fromJSONValue @ThreadsResponseBody
       -- threadsResponseBody <- hoistMaybe $ fromJSONValue @ThreadsResponseBody body
       let threads = body.threads
       -- oldThreadsMap <- atomically $ readTVar (session ^. sessionThreads)
-      let threadsMap = Map.fromList $ fmap (\(Thread id name) -> (id, DapThread id name True)) threads
-      atomically $ writeTVar (session ^. sessionThreads) threadsMap
+      let threadsMap = Map.fromList $ fmap (\(Thread id name) -> (id, ThreadState id name True)) threads
+      atomically $ writeTVar session.threads threadsMap
 
 on :: MonadIO m => DapEnv -> Text -> EventCallback -> m ()
 on env event callback =
-  atomically $ modifyTVar' (env ^. eventCallbacks) (Map.insert event callback)
+  atomically $ modifyTVar' env.eventCallbacks (Map.insert event callback)
 
 callEventCallback :: MonadIO m => DapEnv -> Session -> Text -> Event -> m ()
 callEventCallback env session event value = do
-  callbackMap <- readTVarIO (env ^. eventCallbacks)
+  callbackMap <- readTVarIO env.eventCallbacks
   case Map.lookup event callbackMap of
     Just callback -> liftIO $ callback (value, session)
     Nothing -> pure ()
 
 handleReverseRequest :: MonadIO m => DapEnv -> Text -> ReverseRequestCallback -> m ()
 handleReverseRequest env command callback =
-  atomically $ modifyTVar' (env ^. reverseRequestCallbacks) (Map.insert command callback)
+  atomically $ modifyTVar' env.reverseRequestCallbacks (Map.insert command callback)
 
 callHandleReverseRequest :: MonadIO m => DapEnv -> Text -> Request -> m ()
 callHandleReverseRequest env event value = do
-  callbackMap <- readTVarIO (env ^. reverseRequestCallbacks)
+  callbackMap <- readTVarIO env.reverseRequestCallbacks
   case Map.lookup event callbackMap of
     Just callback -> liftIO $ callback value
     Nothing -> pure ()

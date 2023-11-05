@@ -11,9 +11,6 @@ import Data.Aeson.Types (Object)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector qualified as Vector
-import Lens.Micro
-import Lens.Micro.Aeson
-import Lens.Micro.TH
 import Network.WebSockets.Stream qualified as Stream
 import System.FilePath (takeDirectory, takeFileName)
 import UnliftIO.STM
@@ -22,7 +19,7 @@ import Control.Monad (forever)
 
 app :: Session -> IO ()
 app session = forever $ do
-  let msgOuts = session ^. msgOutChan
-  let stream = session ^. sessionStream
+  let msgOuts = session.msgOutChan
+  let stream = session.stream
   request <- atomically $ readTQueue msgOuts
   Stream.write stream (addContentLength (Aeson.encode request))
