@@ -4,7 +4,7 @@
 module Dap where
 
 import Control.Exception.Safe (MonadThrow)
-import Control.Monad (forever, unless, when)
+import Control.Monad (forM_, forever, unless, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Maybe
 import Dap.Env
@@ -21,7 +21,9 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as BS
 import Data.Functor (void)
+import Data.List qualified as List
 import Data.Map qualified as Map
+import Data.Maybe (isJust, listToMaybe)
 import Data.Text
 import Data.Text qualified as T
 import Network.Simple.TCP qualified as TCP
@@ -44,22 +46,20 @@ initialize env args = do
     void $ async $ MsgOut.app session
     void $ async $ MsgIn.app session
     void $ async $ handleMsg env session
-  sessionInitialize session args
+  sessionInitialize session
   where
-    sessionInitialize :: MonadIO m => Session -> Value -> m ()
-    sessionInitialize session args = do
-      sendRequest session makeInitializeRequest \_ -> do
-        -- TODO: save capabilities
-        sendRequest session (makeLaunchRequest args) \_ -> do
-          pure ()
+    sessionInitialize :: MonadIO m => Session -> m ()
+    sessionInitialize session = do
+      sendRequest session makeInitializeRequest handleInitializeResponse
 
-getNextSessionId :: MonadIO m => DapEnv -> m Int
-getNextSessionId env = do
-  let nextSessionIdVar = env.nextSessionId
-  atomically $ do
-    i <- readTVar nextSessionIdVar
-    writeTVar nextSessionIdVar (i + 1)
-    pure i
+    handleInitializeResponse :: Session -> () -> HandlerM ()
+    handleInitializeResponse session _ = do
+      -- TODO: save capabilities
+      sendRequest session (makeLaunchRequest args) handleLaunchResponse
+
+    handleLaunchResponse :: Session -> () -> HandlerM ()
+    handleLaunchResponse _ _ = do
+      pure ()
 
 handleMsg :: DapEnv -> Session -> IO ()
 handleMsg env session = forever $ do
@@ -85,41 +85,69 @@ setupEvents :: MonadIO m => DapEnv -> m ()
 setupEvents env = do
   on env "initialized" $ \(_, session) -> do
     let filePath = "/home/mahdi/tmp/app.js"
-    sendRequest session (makeSetBreakpointsRequest filePath [2]) $ \_ -> do
-      sendRequest session makeSetExceptionBreakpointsRequest $ \_ -> do
-        sendRequest session makeConfigurationDone $ \_ -> do
+    let handleSetBreakpointsResponse :: Session -> () -> HandlerM ()
+        handleSetBreakpointsResponse session _ = do
+          sendRequest session makeSetExceptionBreakpointsRequest handleSetExceptionBreakpointsResponse
+
+        handleSetExceptionBreakpointsResponse :: Session -> () -> HandlerM ()
+        handleSetExceptionBreakpointsResponse session _ = do
+          sendRequest session makeConfigurationDone handleConfigureDoneResponse
+
+        handleConfigureDoneResponse :: Session -> () -> HandlerM ()
+        handleConfigureDoneResponse session _ = do
           atomically $ writeTVar session.isInitialized True
           atomically $ writeTVar env.session (Just session)
+
+    sendRequest session (makeSetBreakpointsRequest filePath [2]) handleSetBreakpointsResponse
 
   on env "stopped" $ \(event, session) -> do
     rawBody <- throwNothing event.body
     body <- throwNothing $ fromJSONValue @StoppedEventBody rawBody
     threadId <- throwNothing body.threadId
     updateThreads session
-    sendRequest session (makeStackTraceRequest threadId) $ \response -> do
-      rawBody <- throwNothing event.body
-      body <- throwNothing $ fromJSONValue @StackTraceResponseBody rawBody
-      let frames = body.stackFrames
-      pure ()
+    let handleStackTrace :: Session -> StackTraceResponseBody -> HandlerM ()
+        handleStackTrace session body = do
+          let frames = body.stackFrames
+          currentFrame <- hoistMaybe $ getTopFrame frames
+          thread <- getThread session threadId >>= throwNothing
+          requestScopes session currentFrame
+          pure ()
+    sendRequest session (makeStackTraceRequest threadId) handleStackTrace
 
   handleReverseRequest env "startDebugging" $ \request -> do
-    rawArgs <- throwNothing request.arguments
-    args <- throwNothing $ fromJSONValue @StartDebuggingRequestArguments rawArgs
+    args <- throwNothing request.arguments >>= throwNothing . fromJSONValue @StartDebuggingRequestArguments
     let configuration = args.configuration
     let requestType = String args.request
     let fullConfig = KeyMap.insert "request" requestType configuration
     initialize env (Object fullConfig)
 
--- getTopFrame :: [DAP.StackFrame] -> Maybe (DAP.StackFrame)
--- getTopFrame frames = List.find
+requestScopes :: MonadIO m => Session -> StackFrame -> m ()
+requestScopes session frame = do
+  sendRequest session (makeScopesRequest frame.id) handleScopesResponse
+  where
+    handleScopesResponse :: Session -> ScopesResponseBody -> MaybeT IO ()
+    handleScopesResponse session body = do
+      forM_ body.scopes \scope ->
+        unless scope.expensive
+          $ sendRequest session (makeVariablesRequest scope.variablesReference) handleVariableResponse
+
+    handleVariableResponse :: Session -> VariablesResponseBody -> MaybeT IO ()
+    handleVariableResponse session body = do
+      let variables = body.variables
+      pure ()
+
+getTopFrame :: [StackFrame] -> Maybe StackFrame
+getTopFrame frames =
+  case List.find (\s -> isJust s.source) frames of
+    Nothing -> listToMaybe frames
+    x -> x
 
 updateThreads :: MonadIO m => Session -> m ()
 updateThreads session =
-  sendRequest session makeThreadsRequest $ \response -> do
-    putStrLn "i have respose wtf"
-    void $ runMaybeT $ do
-      body <- hoistMaybe response.body >>= hoistMaybe . fromJSONValue @ThreadsResponseBody
-      -- threadsResponseBody <- hoistMaybe $ fromJSONValue @ThreadsResponseBody body
+  sendRequest session makeThreadsRequest handleThreadsResponse
+  where
+    handleThreadsResponse :: Session -> ThreadsResponseBody -> HandlerM ()
+    handleThreadsResponse session body = do
       let threads = body.threads
       -- oldThreadsMap <- atomically $ readTVar (session ^. sessionThreads)
       let threadsMap = Map.fromList $ fmap (\(Thread id name) -> (id, ThreadState id name True)) threads

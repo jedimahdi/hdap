@@ -11,12 +11,13 @@ import Control.Exception.Safe (MonadThrow)
 import Control.Monad (forM_, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Except
+import Control.Monad.Trans.Maybe
 import Dap.Event
 import Dap.Protocol
 import Dap.Request
 import Dap.Response
 import Dap.Types
-import Data.Aeson (ToJSON, Value (..))
+import Data.Aeson (FromJSON, ToJSON, Value (..))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap (KeyMap)
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -38,7 +39,7 @@ import Network.WebSockets.Stream qualified as Stream
 import System.FilePath (takeDirectory, takeFileName)
 import UnliftIO.Async
 import UnliftIO.STM
-import Utils (addContentLength, printJSON, throwNothing)
+import Utils (addContentLength, fromJSONValue, printJSON, throwNothing)
 import Prelude hiding (seq)
 
 type ResponseCallback = Response -> IO ()
@@ -90,6 +91,9 @@ newSession sessionId socket = do
       , stream = stream
       }
 
+getThread :: MonadIO m => Session -> Int -> m (Maybe ThreadState)
+getThread session threadId = Map.lookup threadId <$> readTVarIO session.threads
+
 addCallback :: MonadIO m => Session -> RequestId -> ResponseCallback -> m ()
 addCallback session requestId callback =
   atomically $ modifyTVar' session.messageCallbacks (Map.insert requestId (Just callback))
@@ -109,8 +113,8 @@ callCallback session requestId value = do
 addMsgOut :: MonadIO m => Session -> MsgOut -> m ()
 addMsgOut session msg = atomically $ writeTQueue session.msgOutChan msg
 
-sendRequest :: MonadIO m => Session -> (RequestId -> Request) -> ResponseCallback -> m ()
-sendRequest session mkRequest callback = do
+sendRequest_ :: MonadIO m => Session -> (RequestId -> Request) -> ResponseCallback -> m ()
+sendRequest_ session mkRequest callback = do
   let nextRequestIdVar = session.nextRequestId
   requestId <- atomically $ do
     n <- readTVar nextRequestIdVar
@@ -120,6 +124,18 @@ sendRequest session mkRequest callback = do
   let request = mkRequest requestId
   -- printJSON (Aeson.toJSON request)
   addMsgOut session request
+
+sendRequest :: (MonadIO m, FromJSON a) => Session -> (RequestId -> Request) -> (Session -> a -> MaybeT IO ()) -> m ()
+sendRequest session mkRequest handler = do
+  sendRequest_ session mkRequest (mkRespponseCallback (handler session))
+  where
+    mkRespponseCallback :: FromJSON a => (a -> MaybeT IO ()) -> Response -> IO ()
+    mkRespponseCallback callback response = do
+      _ <- runMaybeT $ do
+        rawBody <- hoistMaybe response.body
+        body <- hoistMaybe $ fromJSONValue rawBody
+        callback body
+      pure ()
 
 -- sendResponse :: MonadIO m => Session -> RequestId -> m ()
 -- sendResponse session requestId = do

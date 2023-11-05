@@ -13,6 +13,9 @@ import Data.Map (Map)
 import Data.Text
 import GHC.Generics (Generic)
 import Utils
+import Control.Monad.Trans.Maybe (MaybeT)
+
+type HandlerM a = MaybeT IO a
 
 data MsgIn = EventMsg Event | RequestMsg Request | ResponseMsg Response
   deriving (Show)
@@ -83,6 +86,7 @@ data Variable = Variable
   , presentationHint :: Maybe VariablePresentationHint
   , evaluateName :: Maybe Text
   }
+  deriving (Show, Generic)
 instance FromJSON Variable where
   parseJSON = withObject "Variable" $ \obj -> do
     name <- obj .: "name"
@@ -116,6 +120,16 @@ instance FromJSON ThreadsResponseBody where
 data StackTraceResponseBody = StackTraceResponseBody
   { stackFrames :: [StackFrame]
   , totalFrames :: Maybe Int
+  }
+  deriving (Show, Generic, FromJSON)
+
+data ScopesResponseBody = ScopesResponseBody
+  { scopes :: [Scope]
+  }
+  deriving (Show, Generic, FromJSON)
+
+data VariablesResponseBody = VariablesResponseBody
+  { variables :: [Variable]
   }
   deriving (Show, Generic, FromJSON)
 

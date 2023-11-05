@@ -65,6 +65,11 @@ makeScopesRequest frameId requestId =
   let args = object ["frameId" .= frameId]
    in makeRequest "scopes" args requestId
 
+makeVariablesRequest :: Int -> RequestId -> Request
+makeVariablesRequest variablesReference requestId =
+  let args = object ["variablesReference" .= variablesReference]
+   in makeRequest "variables" args requestId
+
 makeLoadedSourcesRequest :: RequestId -> Request
 makeLoadedSourcesRequest requestId = do
   let args = object []

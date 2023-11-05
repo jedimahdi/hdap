@@ -51,6 +51,14 @@ newEnv = do
   nextSessionIdVar <- newTVarIO 1
   pure $ DapEnv envSession bps nextSessionIdVar eventCallbacks reverseRequestCallbacks
 
+getNextSessionId :: MonadIO m => DapEnv -> m Int
+getNextSessionId env = do
+  let nextSessionIdVar = env.nextSessionId
+  atomically $ do
+    i <- readTVar nextSessionIdVar
+    writeTVar nextSessionIdVar (i + 1)
+    pure i
+
 -- addAfterEventCallback :: MonadIO m => DapEnv -> DapEventType -> (Session -> IO ()) -> m ()
 -- addAfterEventCallback env eventType callback =
 --   atomically $ modifyTVar' (env ^. afterEventCallbacks) (Map.insertWith (<>) eventType [callback])
