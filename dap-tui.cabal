@@ -19,23 +19,19 @@ category:           Development
 extra-source-files: CHANGELOG.md
 
 library
-    exposed-modules:  MyLib
+    exposed-modules:  Cli
                       Utils
-                      Cli
                       Dap
                       Dap.Session
-                      Dap.Parse
                       Dap.Protocol
                       Dap.Request
+                      Dap.Response
+                      Dap.Event
+                      Dap.MsgIn
+                      Dap.MsgOut
                       Dap.Types
-
-
-    -- Modules included in this library but not exported.
-    -- other-modules:
-
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
-    build-depends:    base ^>=4.16.4.0
+                      Dap.Env
+    build-depends:    base
                     , network-simple
                     , network
                     , text
@@ -46,7 +42,7 @@ library
                     , attoparsec
                     , attoparsec-aeson
                     , case-insensitive
-                    , transformers
+                    , transformers >= 0.6.0.6
                     , async
                     , unliftio
                     , vector
@@ -59,21 +55,45 @@ library
                     , filepath
                     , pretty-simple
                     , safe-exceptions
-                    , streamly
-                    , streamly-core
                     , word8
                     , prettyprinter
                     , indexed-traversable
-                    , brick
-                    , vty
                     , websockets
                     , haskell-dap
     hs-source-dirs:   src
     default-language: GHC2021
     ghc-options: -Wall -Wno-unused-imports -Wno-missing-export-lists -Wno-name-shadowing
-    default-extensions: OverloadedStrings
-                        BlockArguments
-                        LambdaCase
+  default-extensions:  BangPatterns
+                       ConstraintKinds
+                       DataKinds
+                       DeriveGeneric
+                       DerivingStrategies
+                       DerivingVia
+                       FlexibleContexts
+                       FlexibleInstances
+                       GeneralizedNewtypeDeriving
+                       InstanceSigs
+                       KindSignatures
+                       LambdaCase
+                       MultiParamTypeClasses
+                       OverloadedStrings
+                       OverloadedLabels
+                       OverloadedRecordDot
+                       RecordWildCards
+                       ScopedTypeVariables
+                       TypeApplications
+                       TypeFamilies
+                       TypeOperators
+                       GADTs
+                       ViewPatterns
+                       PatternSynonyms
+                       BlockArguments
+                       RankNTypes
+                       StandaloneDeriving
+                       NamedFieldPuns
+                       DeriveAnyClass
+                       DuplicateRecordFields
+                        
 
 executable dap-tui
     main-is:          Main.hs

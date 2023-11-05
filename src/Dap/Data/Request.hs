@@ -1,6 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-
-module Dap.Request where
+module Dap.Data.Request where
 
 import Data.Aeson
 import Data.Aeson qualified as Aeson
@@ -19,7 +18,7 @@ type RequestId = Int
 
 data Request = Request
   { _requestSeq :: RequestId
-  , _requestArguments :: Maybe Value
+  , _requestArguments :: Maybe Object
   , _requestCommand :: Text
   }
   deriving (Show)
@@ -38,14 +37,7 @@ instance ToJSON Request where
       Nothing ->
         object ["seq" .= i, "type" .= String "request", "command" .= command]
 
-instance FromJSON Request where
-  parseJSON = withObject "Request" $ \obj -> do
-    _requestSeq <- obj .: "seq"
-    _requestCommand <- obj .: "command"
-    _requestArguments <- obj .:? "arguments"
-    pure $ Request {..}
-
-makeRequest :: Text -> Value -> RequestId -> Request
+makeRequest :: Text -> Aeson.Object -> RequestId -> Request
 makeRequest command arguments requestId =
   Request
     { _requestSeq = requestId
@@ -63,23 +55,23 @@ makeRequest' command requestId =
 
 makeStackTraceRequest :: Int -> RequestId -> Request
 makeStackTraceRequest threadId requestId =
-  let args = object ["threadId" .= threadId]
+  let args = KeyMap.fromList ["threadId" .= threadId]
    in makeRequest "stackTrace" args requestId
 
 makeScopesRequest :: Int -> RequestId -> Request
 makeScopesRequest frameId requestId =
-  let args = object ["frameId" .= frameId]
+  let args = KeyMap.fromList ["frameId" .= frameId]
    in makeRequest "scopes" args requestId
 
 makeLoadedSourcesRequest :: RequestId -> Request
 makeLoadedSourcesRequest requestId = do
-  let args = object []
+  let args = KeyMap.fromList []
   makeRequest "loadedSources" args requestId
 
 makeBreakpointLocationsRequest :: Text -> RequestId -> Request
 makeBreakpointLocationsRequest path requestId =
   let args =
-        object
+        KeyMap.fromList
           [ "source" .= object ["path" .= path, "name" .= takeFileName (T.unpack path)]
           , "line" .= Number 1
           ]
@@ -88,21 +80,21 @@ makeBreakpointLocationsRequest path requestId =
 makeSetExceptionBreakpointsRequest :: RequestId -> Request
 makeSetExceptionBreakpointsRequest requestId =
   let args =
-        object
+        KeyMap.fromList
           [("filters", Array (Vector.fromList []))]
    in makeRequest "setExceptionBreakpoints" args requestId
 
 makeSourceRequest :: Text -> RequestId -> Request
 makeSourceRequest path requestId =
   let args =
-        object
+        KeyMap.fromList
           [("source", Object (KeyMap.fromList [("path", String path)]))]
    in makeRequest "source" args requestId
 
 makeContinueRequest :: RequestId -> Request
 makeContinueRequest requestId =
   let args =
-        object
+        KeyMap.fromList
           [("threadId", Number 1)]
    in makeRequest "continue" args requestId
 
@@ -112,17 +104,33 @@ makeThreadsRequest = makeRequest' "threads"
 makeConfigurationDone :: RequestId -> Request
 makeConfigurationDone requestId =
   let args =
-        object
+        KeyMap.fromList
           []
    in makeRequest "configurationDone" args requestId
 
-makeLaunchRequest :: Value -> RequestId -> Request
+makeStartDebuggingRequest :: FilePath -> RequestId -> Request
+makeStartDebuggingRequest path requestId =
+  let configs =
+        KeyMap.fromList
+          [ ("request", String "launch")
+          , ("type", String "pwa-node")
+          , ("name", String "Launch file")
+          , ("program", String (T.pack path))
+          , ("cwd", String (T.pack (takeDirectory path)))
+          ]
+      args =
+        KeyMap.fromList
+          [("configuration", Object configs), ("request", "launch")]
+          `KeyMap.union` configs
+   in makeRequest "startDebugging" args requestId
+
+makeLaunchRequest :: KeyMap Value -> RequestId -> Request
 makeLaunchRequest = makeRequest "launch"
 
 makeInitializeRequest :: RequestId -> Request
 makeInitializeRequest requestId =
   let args =
-        object
+        KeyMap.fromList
           [ ("clientId", String "dap-tui")
           , ("clientname", String "dap-tui")
           , ("supportsStartDebuggingRequest", Bool False)
@@ -139,29 +147,29 @@ makeInitializeRequest requestId =
 
 makeSetBreakpointsRequest :: Text -> [Int] -> RequestId -> Request
 makeSetBreakpointsRequest path breakpoints = makeRequest "setBreakpoints" arguments
-  where
-    arguments =
-      object
-        [
-          ( "source"
-          , Object
-              $ KeyMap.fromList
-                [ ("path", String path)
-                , ("name", String $ T.pack $ takeFileName (T.unpack path))
-                ]
-          )
-        , ("sourceModified", Bool False)
-        ,
-          ( "breakpoints"
-          , Array
-              ( ( \line ->
-                    Object
-                      $ KeyMap.fromList
-                        [ ("line", Number (fromIntegral line))
-                        ]
-                )
-                  <$> Vector.fromList breakpoints
+ where
+  arguments =
+    KeyMap.fromList
+      [
+        ( "source"
+        , Object $
+            KeyMap.fromList
+              [ ("path", String path)
+              , ("name", String $ T.pack $ takeFileName (T.unpack path))
+              ]
+        )
+      , ("sourceModified", Bool False)
+      ,
+        ( "breakpoints"
+        , Array
+            ( ( \line ->
+                  Object $
+                    KeyMap.fromList
+                      [ ("line", Number (fromIntegral line))
+                      ]
               )
-          )
-        , ("lines", Array (Number . fromIntegral <$> Vector.fromList breakpoints))
-        ]
+                <$> Vector.fromList breakpoints
+            )
+        )
+      , ("lines", Array (Number . fromIntegral <$> Vector.fromList breakpoints))
+      ]

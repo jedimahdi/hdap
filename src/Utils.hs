@@ -1,18 +1,27 @@
 module Utils where
 
 import Control.Exception.Safe
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Aeson
 import Data.Aeson.Text qualified as Aeson
+import Data.ByteString.Lazy qualified as BSL
+import Data.ByteString.Lazy.Char8 qualified as BSL.Char8
 import Data.Foldable qualified as F
 import Data.Foldable.WithIndex qualified as F
+import Data.Text.Lazy qualified as TL
+import Data.Text.Lazy.Encoding qualified as TLE
 import Prettyprinter
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import qualified Data.ByteString.Lazy as BSL
-import qualified Data.Text.Lazy.Encoding as TLE
-import qualified Data.Text.Lazy as TL
+import Data.Aeson.Types (parseMaybe)
 
 rdrop :: String -> String -> String
 rdrop str = reverse . drop (length str) . reverse
+
+addContentLength :: BSL.ByteString -> BSL.ByteString
+addContentLength s =
+  "Content-Length: "
+    <> BSL.Char8.pack (show (BSL.length s))
+    <> "\r\n\r\n"
+    <> s
 
 throwLeft :: MonadThrow m => Either String b -> m b
 throwLeft (Left s) = throwString s
@@ -21,6 +30,9 @@ throwLeft (Right x) = pure x
 throwNothing :: MonadThrow m => Maybe a -> m a
 throwNothing Nothing = throwString "Value was Nothing."
 throwNothing (Just x) = pure x
+
+fromJSONValue :: FromJSON a => Value -> Maybe a
+fromJSONValue = parseMaybe parseJSON
 
 printJSON :: MonadIO m => Value -> m ()
 printJSON = liftIO . print . prettyJSON

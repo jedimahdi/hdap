@@ -1,62 +1,182 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Use newtype instead of data" #-}
 
 module Dap.Types where
 
+import Dap.Event
+import Dap.Request (Request)
+import Dap.Response (Response)
 import Data.Aeson
 import Data.Aeson.TH
+import Data.Text
 import Haskell.DAP qualified as DAP
 import Utils
 
-data Request
-  = InitializeRequest DAP.InitializeRequest
-  | LaunchRequest DAP.LaunchRequest
-  | DisconnectRequest DAP.DisconnectRequest
-  | PauseRequest DAP.PauseRequest
-  | TerminateRequest DAP.TerminateRequest
-  | SetBreakpointsRequest DAP.SetBreakpointsRequest
-  | SetFunctionBreakpointsRequest DAP.SetFunctionBreakpointsRequest
-  | SetExceptionBreakpointsRequest DAP.SetExceptionBreakpointsRequest
-  | ConfigurationDoneRequest DAP.ConfigurationDoneRequest
-  | ThreadsRequest DAP.ThreadsRequest
-  | StackTraceRequest DAP.StackTraceRequest
-  | ScopesRequest DAP.ScopesRequest
-  | VariablesRequest DAP.VariablesRequest
-  | SourceRequest DAP.SourceRequest
-  | ContinueRequest DAP.ContinueRequest
-  | NextRequest DAP.NextRequest
-  | StepInRequest DAP.StepInRequest
-  | EvaluateRequest DAP.EvaluateRequest
-  | CompletionsRequest DAP.CompletionsRequest
-  deriving (Show, Read, Eq)
+data MsgIn = EventMsg Event | RequestMsg Request | ResponseMsg Response
+  deriving (Show)
 
-data Response
-  = InitializeResponse DAP.InitializeResponse
-  | LaunchResponse DAP.LaunchResponse
-  | OutputEvent DAP.OutputEvent
-  | StoppedEvent DAP.StoppedEvent
-  | TerminatedEvent DAP.TerminatedEvent
-  | ExitedEvent DAP.ExitedEvent
-  | ContinuedEvent DAP.ContinuedEvent
-  | InitializedEvent DAP.InitializedEvent
-  | DisconnectResponse DAP.DisconnectResponse
-  | PauseResponse DAP.PauseResponse
-  | TerminateResponse DAP.TerminateResponse
-  | SetBreakpointsResponse DAP.SetBreakpointsResponse
-  | SetFunctionBreakpointsResponse DAP.SetFunctionBreakpointsResponse
-  | SetExceptionBreakpointsResponse DAP.SetExceptionBreakpointsResponse
-  | ConfigurationDoneResponse DAP.ConfigurationDoneResponse
-  | ThreadsResponse DAP.ThreadsResponse
-  | StackTraceResponse DAP.StackTraceResponse
-  | ScopesResponse DAP.ScopesResponse
-  | VariablesResponse DAP.VariablesResponse
-  | SourceResponse DAP.SourceResponse
-  | ContinueResponse DAP.ContinueResponse
-  | NextResponse DAP.NextResponse
-  | StepInResponse DAP.StepInResponse
-  | EvaluateResponse DAP.EvaluateResponse
-  | CompletionsResponse DAP.CompletionsResponse
-  deriving (Show, Read, Eq)
+instance FromJSON MsgIn where
+  parseJSON = withObject "MsgIn" $ \obj -> do
+    msgType :: Text <- obj .: "type"
+    case msgType of
+      "event" -> EventMsg <$> parseJSON (Object obj)
+      "request" -> RequestMsg <$> parseJSON (Object obj)
+      "response" -> ResponseMsg <$> parseJSON (Object obj)
+      _ -> fail "Parsing MsgIn failed: wrong msg type"
+
+type MsgOut = Request
+
+data Checksum = Checksum
+  { algorithm :: Text
+  , checksum :: Text
+  }
+
+data Source = Source
+  { _name :: Maybe Text
+  , _path :: Maybe Text
+  , _sourceReference :: Maybe Int
+  , _presentationHint :: Maybe Text
+  , _origin :: Maybe Text
+  , _sources :: Maybe [Source]
+  , _adapterData :: Maybe Value
+  , _checksums :: Maybe [Checksum]
+  }
+
+data StackFrame = StackFrame
+  { _id :: Int
+  , _name :: Text
+  , _source :: Maybe Source
+  }
+
+data Scope = Scope
+  { _name :: Text
+  , _presentationHint :: Maybe Text
+  , _variablesReference :: Int
+  , _namedVariables :: Maybe Int
+  , _indexedVariables :: Maybe Int
+  , _expensive :: Bool
+  , _source :: Maybe Source
+  , _line :: Maybe Int
+  , _column :: Maybe Int
+  , _endLine :: Maybe Int
+  , _endColumn :: Maybe Int
+  }
+
+data VariablePresentationHint = VariablePresentationHint
+  { _kind :: Maybe Text
+  , _attributes :: Maybe [Text]
+  , _visibility :: Maybe Text
+  , _lazy :: Maybe Bool
+  }
+
+data Variable = Variable
+  { _name :: Text
+  , _value :: Text
+  , _type :: Maybe Text
+  , _presentationHint :: Maybe VariablePresentationHint
+  , _evaluateName :: Maybe Text
+  }
+
+data Thread = Thread
+  { id :: Int
+  , name :: Text
+  }
+instance FromJSON Thread where
+  parseJSON = withObject "Thread" $ \obj -> do
+    id <- obj .: "id"
+    name <- obj .: "name"
+    pure $ Thread {..}
+
+data ThreadsResponseBody = ThreadsResponseBody
+  { threads :: [Thread]
+  }
+
+instance FromJSON ThreadsResponseBody where
+  parseJSON = withObject "ThreadsResponseBody" $ \obj -> do
+    threads <- obj .: "threads"
+    pure $ ThreadsResponseBody {..}
+
+-- case text of
+--   "user"             -> return User
+--   "admin"            -> return Admin
+--   "customer_support" -> return CustomerSupport
+--   _                  -> fail "string is not one of known enum values"
+
+-- data EventType
+--   = DapEventOutput
+--   | DapEventStopped
+--   | DapEventLoadedSource
+--   | DapEventInitialized
+--   deriving (Eq, Ord)
+--
+-- parseEventType :: Text -> Maybe DapEventType
+-- parseEventType "output" = Just DapEventOutput
+-- parseEventType "stopped" = Just DapEventStopped
+-- parseEventType "loadedSource" = Just DapEventLoadedSource
+-- parseEventType "initialized" = Just DapEventInitialized
+-- parseEventType _ = Nothing
+
+-- data Request
+--   = InitializeRequest DAP.InitializeRequest
+--   | LaunchRequest DAP.LaunchRequest
+--   | DisconnectRequest DAP.DisconnectRequest
+--   | PauseRequest DAP.PauseRequest
+--   | TerminateRequest DAP.TerminateRequest
+--   | SetBreakpointsRequest DAP.SetBreakpointsRequest
+--   | SetFunctionBreakpointsRequest DAP.SetFunctionBreakpointsRequest
+--   | SetExceptionBreakpointsRequest DAP.SetExceptionBreakpointsRequest
+--   | ConfigurationDoneRequest DAP.ConfigurationDoneRequest
+--   | ThreadsRequest DAP.ThreadsRequest
+--   | StackTraceRequest DAP.StackTraceRequest
+--   | ScopesRequest DAP.ScopesRequest
+--   | VariablesRequest DAP.VariablesRequest
+--   | SourceRequest DAP.SourceRequest
+--   | ContinueRequest DAP.ContinueRequest
+--   | NextRequest DAP.NextRequest
+--   | StepInRequest DAP.StepInRequest
+--   | EvaluateRequest DAP.EvaluateRequest
+--   | CompletionsRequest DAP.CompletionsRequest
+--   deriving (Show, Read, Eq)
+--
+-- data MsgIn
+--
+-- data EventType = InitializedEvent | OutputEvent
+
+-- data Event = Event
+--   { _event :: EventType
+--   , _body :: Value
+--   }
+
+-- data Response
+--   = InitializeResponse DAP.InitializeResponse
+--   | LaunchResponse DAP.LaunchResponse
+--   | OutputEvent DAP.OutputEvent
+--   | StoppedEvent DAP.StoppedEvent
+--   | TerminatedEvent DAP.TerminatedEvent
+--   | ExitedEvent DAP.ExitedEvent
+--   | ContinuedEvent DAP.ContinuedEvent
+--   | InitializedEvent DAP.InitializedEvent
+--   | DisconnectResponse DAP.DisconnectResponse
+--   | PauseResponse DAP.PauseResponse
+--   | TerminateResponse DAP.TerminateResponse
+--   | SetBreakpointsResponse DAP.SetBreakpointsResponse
+--   | SetFunctionBreakpointsResponse DAP.SetFunctionBreakpointsResponse
+--   | SetExceptionBreakpointsResponse DAP.SetExceptionBreakpointsResponse
+--   | ConfigurationDoneResponse DAP.ConfigurationDoneResponse
+--   | ThreadsResponse DAP.ThreadsResponse
+--   | StackTraceResponse DAP.StackTraceResponse
+--   | ScopesResponse DAP.ScopesResponse
+--   | VariablesResponse DAP.VariablesResponse
+--   | SourceResponse DAP.SourceResponse
+--   | ContinueResponse DAP.ContinueResponse
+--   | NextResponse DAP.NextResponse
+--   | StepInResponse DAP.StepInResponse
+--   | EvaluateResponse DAP.EvaluateResponse
+--   | CompletionsResponse DAP.CompletionsResponse
+--   deriving (Show, Read, Eq)
 
 $(deriveJSON defaultOptions {fieldLabelModifier = rdrop "Source", omitNothingFields = True} ''DAP.Source)
 $(deriveJSON defaultOptions {fieldLabelModifier = rdrop "SourceBreakpoint", omitNothingFields = True} ''DAP.SourceBreakpoint)
@@ -197,5 +317,6 @@ $(deriveJSON defaultOptions {fieldLabelModifier = rdrop "ExitedEvent", omitNothi
 $(deriveJSON defaultOptions {fieldLabelModifier = rdrop "ContinuedEventBody", omitNothingFields = True} ''DAP.ContinuedEventBody)
 $(deriveJSON defaultOptions {fieldLabelModifier = rdrop "ContinuedEvent", omitNothingFields = True} ''DAP.ContinuedEvent)
 
-$(deriveJSON defaultOptions {sumEncoding = UntaggedValue} ''Request)
-$(deriveJSON defaultOptions {sumEncoding = UntaggedValue} ''Response)
+-- $(deriveJSON defaultOptions {sumEncoding = UntaggedValue} ''Request)
+
+-- $(deriveJSON defaultOptions {sumEncoding = UntaggedValue} ''Response)

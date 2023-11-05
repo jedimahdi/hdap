@@ -6,13 +6,14 @@ import Control.Exception.Safe
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Maybe
-import Dap.Parse
 import Data.Aeson (Value)
 import Data.Aeson.Parser (json')
 import Data.Attoparsec.ByteString (Parser)
 import Data.Attoparsec.ByteString qualified as Parser
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
+import Data.ByteString.Lazy qualified as BSL
+import Data.ByteString.Lazy.Char8 qualified as BSL.Char8
 import Data.ByteString.Short qualified as ByteString.Short
 import Data.Char (chr)
 import Data.Function ((&))
@@ -53,42 +54,11 @@ dapProtocolParser = do
 readLoop :: (MonadIO m, MonadThrow m) => Stream.Stream -> (Value -> m a) -> m b -> m b
 readLoop stream handleBody onNoChunk = do
   loop
- where
-  loop = do
-    md <- liftIO $ parse stream dapProtocolParser
-    case md of
-      Nothing -> onNoChunk
-      Just value -> do
-        void $ handleBody value
-        loop
-
-recieve :: (MonadIO m, MonadThrow m) => Socket -> BS.ByteString -> m (Maybe (BS.ByteString, BS.ByteString))
-recieve socket rem = runMaybeT $ do
-  x <- MaybeT $ TCP.recv socket chunkSize
-  y <- throwLeft $ parseChunkLoop (Initial (rem <> x))
-  loop y
- where
-  loop (NeedMore contentLength chunks) = do
-    x <- MaybeT $ TCP.recv socket chunkSize
-    y <- throwLeft $ parseChunkLoop (WithMore contentLength chunks x)
-    loop y
-  loop (Done body remaining) = pure (body, remaining)
-  loop (UnParsable s) = do
-    x <- MaybeT $ TCP.recv socket chunkSize
-    y <- throwLeft $ parseChunkLoop (Initial (s <> x))
-    loop y
-  loop Failed = error "failed parsing"
-
-  chunkSize = 32768
-
-createReadLoop :: (MonadIO m, MonadThrow m) => Socket -> (BS.ByteString -> m a) -> m b -> m b
-createReadLoop socket handleBody onNoChunk = do
-  loop ""
- where
-  loop r = do
-    md <- recieve socket r
-    case md of
-      Nothing -> onNoChunk
-      Just (d, rem) -> do
-        void $ handleBody d
-        loop rem
+  where
+    loop = do
+      md <- liftIO $ parse stream dapProtocolParser
+      case md of
+        Nothing -> onNoChunk
+        Just value -> do
+          void $ handleBody value
+          loop

@@ -4,146 +4,151 @@
 module Dap where
 
 import Control.Exception.Safe (MonadThrow)
-import Control.Monad (unless, when)
+import Control.Monad (forever, unless, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Trans.Maybe
+import Dap.Env
+import Dap.Event
+import Dap.MsgIn qualified as MsgIn
+import Dap.MsgOut qualified as MsgOut
 import Dap.Protocol
 import Dap.Request
+import Dap.Response
 import Dap.Session
+import Dap.Types
 import Data.Aeson
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as BS
+import Data.Functor (void)
+import Data.Map qualified as Map
+import Data.Text
 import Data.Text qualified as T
+import Haskell.DAP qualified as DAP
 import Lens.Micro
 import Lens.Micro.Aeson
 import Network.Simple.TCP qualified as TCP
+import Network.WebSockets.Stream qualified as Stream
 import System.FilePath (takeDirectory)
 import UnliftIO.Async
 import UnliftIO.STM
 import Utils
 
-initialize :: MonadIO m => DapEnv -> m Session
-initialize env = do
-  session <- newSession env
-  let sessionsVar = env ^. sessions
-  atomically $ modifyTVar' sessionsVar (session :)
-
-  let filePath = "/home/mahdi/tmp/app.js"
-  let args =
-        KeyMap.fromList
-          [ ("request", String "launch")
-          , ("type", String "pwa-node")
-          , ("name", String "Launch file")
-          , ("program", String filePath)
-          , ("runtimeExecutable", String "node")
-          , ("cwd", String (T.pack (takeDirectory (T.unpack filePath))))
-          ]
+initialize :: MonadIO m => DapEnv -> Value -> m ()
+initialize env args = do
+  setupEvents env
+  (socket, remoteAddr) <- TCP.connectSock "localhost" "8123"
+  liftIO $ putStrLn $ "Connection established to " ++ show remoteAddr ++ " Socket: " <> show socket
+  sessionId <- getNextSessionId env
+  session <- newSession sessionId socket
+  let sessionVar = env ^. envSession
+  atomically $ writeTVar sessionVar (Just session)
+  void $ liftIO $ do
+    void $ async $ MsgOut.app session
+    void $ async $ MsgIn.app session
+    void $ async $ handleMsg env session
   sessionInitialize session args
-  pure session
   where
-    handleBody :: (MonadIO m, MonadThrow m) => DapEnv -> Session -> BS.ByteString -> m ()
-    handleBody env session body = do
-      let filePath = "/home/mahdi/tmp/app.js"
-      js <- throwNothing $ Aeson.decode @Value (BS.fromStrict body)
-      responseType <- throwNothing $ js ^? key "type" . _String
-      when (responseType == "event" || responseType == "request") $ incSeq session
-
-      when (responseType == "response") $ do
-        printJSON js
-        resSeq <- throwNothing $ js ^? key "request_seq" . _Number . _Integer
-        callCallback session (fromIntegral resSeq) js
-
-      when (responseType == "event") $ do
-        event <- throwNothing $ js ^? key "event" . _String
-
-        liftIO $ putStrLn $ "Session " <> show (session ^. sessionId)
-
-        case parseEventType event of
-          Just eventType -> do
-            callAfterEventCallbacks env session eventType
-            case eventType of
-              DapEventOutput -> liftIO $ putStrLn "output event"
-              DapEventLoadedSource -> liftIO $ putStrLn "loadedSource event"
-              DapEventStopped -> do
-                let mthreadId :: Maybe Int = fromIntegral <$> js ^? key "body" . key "threadId" . _Number . _Integer
-
-                case mthreadId of
-                  Nothing -> printJSON js
-                  Just threadId -> do
-                    printJSON js
-                    atomically $ modifyTVar' (session ^. threads) (DapThread threadId True :)
-                    pure ()
-
-                pure ()
-              _ -> printJSON js
-          Nothing -> do
-            pure ()
-        -- liftIO $ print ("unknown event type" <> event)
-
-        when (event == "initialized") $ do
-          isAlreadyInit <- readTVarIO (session ^. isInitialized)
-
-          unless isAlreadyInit $ do
-            atomically $ writeTVar (session ^. isInitialized) True
-            bps <- readTVarIO $ env ^. breakpoints
-            sendRequest session (makeSetBreakpointsRequest filePath bps) \_ -> do
-              sendRequest session makeSetExceptionBreakpointsRequest \_ -> do
-                sendRequest session makeConfigurationDone \_ -> do
-                  pure ()
-
-      when (responseType == "request") $ do
-        -- printJSON js
-        resCommand <- throwNothing $ js ^? key "command" . _String
-        when (resCommand == "startDebugging") $ do
-          args <- throwNothing $ js ^? key "arguments" . key "configuration" . _Object
-          requestId <- throwNothing $ js ^? key "seq" . _Number . _Integer
-          session2 <- newSession env
-          sendResponse session2 (fromIntegral requestId)
-          sessionInitialize session2 args
-
-    sessionInitialize :: MonadIO m => Session -> Object -> m ()
+    sessionInitialize :: MonadIO m => Session -> Value -> m ()
     sessionInitialize session args = do
       sendRequest session makeInitializeRequest \_ -> do
         -- TODO: save capabilities
         sendRequest session (makeLaunchRequest args) \_ -> do
           pure ()
 
-    newSession :: MonadIO m => DapEnv -> m Session
-    newSession env = do
-      (socket, remoteAddr) <- TCP.connectSock "localhost" "8123"
-      liftIO $ putStrLn $ "Connection established to " ++ show remoteAddr ++ " Socket: " <> show socket
-      requestSeq <- newTVarIO 1
-      callbacks <- newTVarIO mempty
-      eventCs <- newTVarIO mempty
-      threads <- newTVarIO []
-      isInitialized <- newTVarIO False
-      let nextSessionIdVar = env ^. nextSessionId
-      sessionId <- atomically $ do
-        i <- readTVar nextSessionIdVar
-        writeTVar nextSessionIdVar (i + 1)
-        pure i
-      let session = Session sessionId requestSeq callbacks eventCs socket threads isInitialized
-      _ <- liftIO $ async (createReadLoop socket (handleBody env session) (pure ()))
-      pure session
+getNextSessionId :: MonadIO m => DapEnv -> m Int
+getNextSessionId env = do
+  let nextSessionIdVar = env ^. nextSessionId
+  atomically $ do
+    i <- readTVar nextSessionIdVar
+    writeTVar nextSessionIdVar (i + 1)
+    pure i
 
-setBreakpoint :: MonadIO m => DapEnv -> Int -> m ()
-setBreakpoint env lineNumber = do
-  atomically $ modifyTVar' (env ^. breakpoints) (lineNumber :)
+handleMsg :: DapEnv -> Session -> IO ()
+handleMsg env session = forever $ do
+  let msgIns = session ^. msgInChan
+  msg <- atomically $ readTQueue msgIns
+  case msg of
+    ResponseMsg response -> do
+      let responseRequestId = response ^. responseRequestSeq
+      let command = response ^. responseCommand
+      putStrLn $ show session ++ ": Response to " ++ show command
+      print response
+      callCallback session responseRequestId response
+    EventMsg event -> do
+      let eventType = event ^. eventEvent
+      when (eventType /= "output" && eventType /= "loadedSource") $ do
+        putStrLn $ show session ++ ": Event " ++ show eventType
+        print event
+      callEventCallback env session eventType event
+    RequestMsg request -> do
+      let command = request ^. requestCommand
+      putStrLn $ show session ++ ": Reverse Request " ++ show command
+      print request
+      callHandleReverseRequest env command request
 
-continue :: _
-continue = undefined
+setupEvents :: MonadIO m => DapEnv -> m ()
+setupEvents env = do
+  on env "initialized" $ \(_, session) -> do
+    let filePath = "/home/mahdi/tmp/app.js"
+    sendRequest session (makeSetBreakpointsRequest filePath [2]) $ \_ -> do
+      sendRequest session makeSetExceptionBreakpointsRequest $ \_ -> do
+        sendRequest session makeConfigurationDone $ \_ -> do
+          atomically $ writeTVar (session ^. isInitialized) True
+          atomically $ writeTVar (env ^. envSession) (Just session)
 
-listBreakpoints :: _
-listBreakpoints = undefined
+  on env "stopped" $ \(event, session) -> do
+    -- allThreadsStopped <- throwNothing $ event ^? eventBody . _Just . key "allThreadsStopped" . _Bool
+    putStrLn "before everything"
+    threadId :: Int <- throwNothing $ event ^? eventBody . _Just . key "threadId" . _Number . _Integral
+    putStrLn "before updateThreads"
+    updateThreads session
+    putStrLn "After updateThreads"
+    sendRequest session (makeStackTraceRequest threadId) $ \response -> do
+      body <- throwNothing $ response ^. responseBody
+      stackTraceResponseBody <- throwNothing $ fromJSONValue @DAP.StackTraceResponseBody body
+      let frames = DAP.stackFramesStackTraceResponseBody stackTraceResponseBody
+      pure ()
 
-clearBreakpoints :: _
-clearBreakpoints = undefined
+  handleReverseRequest env "startDebugging" $ \request -> do
+    configuration <- throwNothing $ request ^? requestArguments . _Just . key "configuration" . _Object
+    requestType <- throwNothing $ request ^? requestArguments . _Just . key "request"
+    let fullConfig = KeyMap.insert "request" requestType configuration
+    initialize env (Object fullConfig)
 
-shutdown :: MonadIO m => DapEnv -> m ()
-shutdown env = do
-  m <- readTVarIO $ env ^. lastStopSession
-  case m of
-    Just s -> do
-      TCP.closeSock (s ^. sessionSocket)
-    Nothing -> liftIO $ putStrLn "wtf"
-  pure ()
+-- getTopFrame :: [DAP.StackFrame] -> Maybe (DAP.StackFrame)
+-- getTopFrame frames = List.find
+
+updateThreads :: MonadIO m => Session -> m ()
+updateThreads session =
+  sendRequest session makeThreadsRequest $ \response -> do
+    putStrLn "i have respose wtf"
+    void $ runMaybeT $ do
+      body <- hoistMaybe response._responseBody >>= hoistMaybe . fromJSONValue @ThreadsResponseBody
+      -- threadsResponseBody <- hoistMaybe $ fromJSONValue @ThreadsResponseBody body
+      let threads = body.threads
+      -- oldThreadsMap <- atomically $ readTVar (session ^. sessionThreads)
+      let threadsMap = Map.fromList $ fmap (\(Thread id name) -> (id, DapThread id name True)) threads
+      atomically $ writeTVar (session ^. sessionThreads) threadsMap
+
+on :: MonadIO m => DapEnv -> Text -> EventCallback -> m ()
+on env event callback =
+  atomically $ modifyTVar' (env ^. eventCallbacks) (Map.insert event callback)
+
+callEventCallback :: MonadIO m => DapEnv -> Session -> Text -> Event -> m ()
+callEventCallback env session event value = do
+  callbackMap <- readTVarIO (env ^. eventCallbacks)
+  case Map.lookup event callbackMap of
+    Just callback -> liftIO $ callback (value, session)
+    Nothing -> pure ()
+
+handleReverseRequest :: MonadIO m => DapEnv -> Text -> ReverseRequestCallback -> m ()
+handleReverseRequest env command callback =
+  atomically $ modifyTVar' (env ^. reverseRequestCallbacks) (Map.insert command callback)
+
+callHandleReverseRequest :: MonadIO m => DapEnv -> Text -> Request -> m ()
+callHandleReverseRequest env event value = do
+  callbackMap <- readTVarIO (env ^. reverseRequestCallbacks)
+  case Map.lookup event callbackMap of
+    Just callback -> liftIO $ callback value
+    Nothing -> pure ()

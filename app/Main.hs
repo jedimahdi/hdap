@@ -1,5 +1,6 @@
 module Main where
 
-import qualified MyLib
+import qualified Cli
 
-main = MyLib.main
+main = do
+    Cli.cli
