@@ -70,6 +70,11 @@ makeVariablesRequest variablesReference requestId =
   let args = object ["variablesReference" .= variablesReference]
    in makeRequest "variables" args requestId
 
+makeNextRequest :: Int -> RequestId -> Request
+makeNextRequest threadId requestId =
+  let args = object ["threadId" .= threadId]
+   in makeRequest "next" args requestId
+
 makeLoadedSourcesRequest :: RequestId -> Request
 makeLoadedSourcesRequest requestId = do
   let args = object []
@@ -116,7 +121,7 @@ makeConfigurationDone requestId =
    in makeRequest "configurationDone" args requestId
 
 makeLaunchRequest :: Value -> RequestId -> Request
-makeLaunchRequest = makeRequest "launch"
+makeLaunchRequest = makeRequest "attach"
 
 makeInitializeRequest :: RequestId -> Request
 makeInitializeRequest requestId =

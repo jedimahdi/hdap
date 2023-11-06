@@ -29,6 +29,7 @@ import Data.Text qualified as T
 import Network.Simple.TCP qualified as TCP
 import Network.WebSockets.Stream qualified as Stream
 import System.FilePath (takeDirectory)
+import Text.Pretty.Simple (pPrint)
 import UnliftIO.Async
 import UnliftIO.STM
 import Utils
@@ -105,14 +106,18 @@ setupEvents env = do
     body <- throwNothing $ fromJSONValue @StoppedEventBody rawBody
     threadId <- throwNothing body.threadId
     updateThreads session
-    let handleStackTrace :: Session -> StackTraceResponseBody -> HandlerM ()
-        handleStackTrace session body = do
+    let handleStackTraceResponse :: Session -> StackTraceResponseBody -> HandlerM ()
+        handleStackTraceResponse session body = do
           let frames = body.stackFrames
           currentFrame <- hoistMaybe $ getTopFrame frames
-          thread <- getThread session threadId >>= throwNothing
+          _thread <- getThread session threadId >>= throwNothing
           requestScopes session currentFrame
           pure ()
-    sendRequest session (makeStackTraceRequest threadId) handleStackTrace
+
+    sendRequest session (makeStackTraceRequest threadId) handleStackTraceResponse
+
+  on env "breakpoint" \(_, _session) -> do
+    pure ()
 
   handleReverseRequest env "startDebugging" $ \request -> do
     args <- throwNothing request.arguments >>= throwNothing . fromJSONValue @StartDebuggingRequestArguments
@@ -120,6 +125,15 @@ setupEvents env = do
     let requestType = String args.request
     let fullConfig = KeyMap.insert "request" requestType configuration
     initialize env (Object fullConfig)
+
+next :: MonadIO m => Session -> m ()
+next session = do
+  threadsMap <- readTVarIO session.threads
+  case listToMaybe $ Map.elems threadsMap of
+    Nothing -> liftIO $ putStrLn "Stupid !!!"
+    Just (ThreadState id _ _) -> do
+      sendRequest session (makeNextRequest id) (\_ () -> pure ())
+      pure ()
 
 requestScopes :: MonadIO m => Session -> StackFrame -> m ()
 requestScopes session frame = do
@@ -132,8 +146,9 @@ requestScopes session frame = do
           $ sendRequest session (makeVariablesRequest scope.variablesReference) handleVariableResponse
 
     handleVariableResponse :: Session -> VariablesResponseBody -> MaybeT IO ()
-    handleVariableResponse session body = do
+    handleVariableResponse _session body = do
       let variables = body.variables
+      pPrint variables
       pure ()
 
 getTopFrame :: [StackFrame] -> Maybe StackFrame

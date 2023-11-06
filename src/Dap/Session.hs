@@ -136,36 +136,3 @@ sendRequest session mkRequest handler = do
         body <- hoistMaybe $ fromJSONValue rawBody
         callback body
       pure ()
-
--- sendResponse :: MonadIO m => Session -> RequestId -> m ()
--- sendResponse session requestId = do
---   let seqTVar = session ^. seqVar
---   responseId <- atomically $ do
---     n <- readTVar seqTVar
---     writeTVar seqTVar (n + 1)
---     pure n
---   let socket = session ^. sessionSocket
---   let body =
---         KeyMap.fromList
---           [ ("seq", Number (fromIntegral responseId))
---           , ("request_seq", Number (fromIntegral requestId))
---           , ("type", "response")
---           , ("command", String "startDebugging")
---           , ("success", Bool True)
---           ]
---   send socket (addContentLength (Aeson.encode body))
-
--- addEventCallback :: MonadIO m => Session -> DapEventType -> Callback -> m ()
--- addEventCallback session eventType callback =
---   atomically $ modifyTVar' (session ^. eventCallbacks) (Map.insert eventType callback)
---
--- callCallback :: MonadIO m => Session -> RequestId -> Value -> m ()
--- callCallback session requestId json = do
---   callMap <- readTVarIO (session ^. messageCallbacks)
---   case Map.lookup requestId callMap of
---     Just callback -> liftIO $ callback json
---     Nothing -> pure ()
---
--- incSeq :: MonadIO m => Session -> m ()
--- incSeq session = atomically $ modifyTVar' (session ^. seqVar) (+ 1)
---

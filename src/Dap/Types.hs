@@ -3,6 +3,7 @@
 {-# HLINT ignore "Use newtype instead of data" #-}
 module Dap.Types where
 
+import Control.Monad.Trans.Maybe (MaybeT)
 import Dap.Event
 import Dap.Request (Request)
 import Dap.Response (Response)
@@ -13,7 +14,6 @@ import Data.Map (Map)
 import Data.Text
 import GHC.Generics (Generic)
 import Utils
-import Control.Monad.Trans.Maybe (MaybeT)
 
 type HandlerM a = MaybeT IO a
 
@@ -31,8 +31,25 @@ instance FromJSON MsgIn where
 
 type MsgOut = Request
 
+data Breakpoint = Breakpoint
+  { id :: Maybe Int
+  , verified :: Bool
+  , message :: Maybe Text
+  , source :: Maybe Source
+  , line :: Maybe Int
+  , column :: Maybe Int
+  , endLine :: Maybe Int
+  , endColumn :: Maybe Int
+  , instructionReference :: Maybe Text
+  , offset :: Maybe Int
+  , reason :: Maybe Text
+  }
+  deriving (Show, Generic, FromJSON)
+
+type ChecksumAlgorithm = Text
+
 data Checksum = Checksum
-  { algorithm :: Text
+  { algorithm :: ChecksumAlgorithm
   , checksum :: Text
   }
   deriving (Show, Generic, FromJSON)
@@ -71,6 +88,63 @@ data Scope = Scope
   }
   deriving (Show, Generic, FromJSON)
 
+data Capabilities = Capabilities
+  { supportsConfigurationDoneRequest :: Maybe Bool
+  , supportsFunctionBreakpoints :: Maybe Bool
+  , supportsConditionalBreakpoints :: Maybe Bool
+  , supportsHitConditionalBreakpoints :: Maybe Bool
+  , supportsEvaluateForHovers :: Maybe Bool
+  , exceptionBreakpointFilters :: Maybe [ExceptionBreakpointsFilter]
+  , supportsStepBack :: Maybe Bool
+  , supportsSetVariable :: Maybe Bool
+  , supportsRestartFrame :: Maybe Bool
+  , supportsGotoTargetsRequest :: Maybe Bool
+  , supportsStepInTargetsRequest :: Maybe Bool
+  , supportsCompletionsRequest :: Maybe Bool
+  , completionTriggerCharacters :: Maybe [Text]
+  , supportsModulesRequest :: Maybe Bool
+  , additionalModuleColumns :: Maybe [ColumnDescriptor]
+  , supportedChecksumAlgorithms :: Maybe [ChecksumAlgorithm]
+  , supportsRestartRequest :: Maybe Bool
+  }
+  deriving (Show, Generic, FromJSON)
+
+data ColumnDescriptor = ColumnDescriptor
+  { attributeName :: Text
+  , label :: Text
+  , format :: Maybe Text
+  , _type :: Maybe Text -- type
+  , width :: Maybe Int
+  }
+  deriving (Show, Generic)
+instance FromJSON ColumnDescriptor where
+  parseJSON = withObject "ColumnDescriptor" $ \obj -> do
+    attributeName <- obj .: "attributeName"
+    label <- obj .: "label"
+    format <- obj .:? "format"
+    _type <- obj .:? "type"
+    width <- obj .:? "width"
+    pure $ ColumnDescriptor {..}
+
+data ExceptionBreakpointsFilter = ExceptionBreakpointsFilter
+  { filter :: Text
+  , label :: Text
+  , description :: Maybe Text
+  , _default :: Maybe Bool -- default
+  , supportsCondition :: Maybe Bool
+  , conditionDescription :: Maybe Text
+  }
+  deriving (Show, Generic)
+instance FromJSON ExceptionBreakpointsFilter where
+  parseJSON = withObject "ExceptionBreakpointsFilter" $ \obj -> do
+    filter <- obj .: "filter"
+    label <- obj .: "label"
+    description <- obj .:? "description"
+    _default <- obj .:? "default"
+    supportsCondition <- obj .:? "supportsCondition"
+    conditionDescription <- obj .:? "conditionDescription"
+    pure $ ExceptionBreakpointsFilter {..}
+
 data VariablePresentationHint = VariablePresentationHint
   { kind :: Maybe Text
   , attributes :: Maybe [Text]
@@ -82,7 +156,7 @@ data VariablePresentationHint = VariablePresentationHint
 data Variable = Variable
   { name :: Text
   , value :: Text
-  , variableType :: Maybe Text -- type
+  , _type :: Maybe Text -- type
   , presentationHint :: Maybe VariablePresentationHint
   , evaluateName :: Maybe Text
   }
@@ -91,7 +165,7 @@ instance FromJSON Variable where
   parseJSON = withObject "Variable" $ \obj -> do
     name <- obj .: "name"
     value <- obj .: "value"
-    variableType <- obj .:? "type"
+    _type <- obj .:? "type"
     presentationHint <- obj .:? "presentationHint"
     evaluateName <- obj .:? "evaluateName"
     pure $ Variable {..}
