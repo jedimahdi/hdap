@@ -36,7 +36,7 @@ type ReverseRequestCallback = Request -> IO ()
 data DapEnv = DapEnv
   { -- , _afterEventCallbacks :: TVar (Map DapEventType [Session -> IO ()])
     session :: !(TVar (Maybe Session))
-  , breakpoints :: !(TVar [Int])
+  , breakpoints :: !(TVar [Breakpoint])
   , nextSessionId :: !(TVar Int)
   , eventCallbacks :: !(TVar (Map Text EventCallback))
   , reverseRequestCallbacks :: !(TVar (Map Text ReverseRequestCallback))

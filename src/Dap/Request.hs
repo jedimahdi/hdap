@@ -1,5 +1,6 @@
 module Dap.Request where
 
+import Dap.Types
 import Data.Aeson
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap (KeyMap)
@@ -9,35 +10,6 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector qualified as Vector
 import System.FilePath (takeDirectory, takeFileName)
-
-type RequestId = Int
-
-data Request = Request
-  { id :: RequestId
-  , arguments :: Maybe Value
-  , command :: Text
-  }
-  deriving (Show)
-
-instance ToJSON Request where
-  toJSON (Request i margs command) =
-    case margs of
-      Just args ->
-        object
-          [ "seq" .= i
-          , "type" .= String "request"
-          , "command" .= command
-          , "arguments" .= args
-          ]
-      Nothing ->
-        object ["seq" .= i, "type" .= String "request", "command" .= command]
-
-instance FromJSON Request where
-  parseJSON = withObject "Request" $ \obj -> do
-    id <- obj .: "seq"
-    command <- obj .: "command"
-    arguments <- obj .:? "arguments"
-    pure $ Request {..}
 
 makeRequest :: Text -> Value -> RequestId -> Request
 makeRequest command arguments requestId =
@@ -93,14 +65,14 @@ makeSetExceptionBreakpointsRequest :: RequestId -> Request
 makeSetExceptionBreakpointsRequest requestId =
   let args =
         object
-          [("filters", Array (Vector.fromList []))]
+          ["filters" .= Array (Vector.fromList [])]
    in makeRequest "setExceptionBreakpoints" args requestId
 
-makeSourceRequest :: Text -> RequestId -> Request
-makeSourceRequest path requestId =
+makeSourceRequest :: Source -> RequestId -> Request
+makeSourceRequest source requestId =
   let args =
         object
-          [("source", Object (KeyMap.fromList [("path", String path)]))]
+          ["source" .= source]
    in makeRequest "source" args requestId
 
 makeContinueRequest :: RequestId -> Request
@@ -121,7 +93,7 @@ makeConfigurationDone requestId =
    in makeRequest "configurationDone" args requestId
 
 makeLaunchRequest :: Value -> RequestId -> Request
-makeLaunchRequest = makeRequest "attach"
+makeLaunchRequest = makeRequest "launch"
 
 makeInitializeRequest :: RequestId -> Request
 makeInitializeRequest requestId =

@@ -5,7 +5,6 @@ module Dap.Types where
 
 import Control.Monad.Trans.Maybe (MaybeT)
 import Dap.Event
-import Dap.Request (Request)
 import Dap.Response (Response)
 import Data.Aeson
 import Data.Aeson.KeyMap (KeyMap)
@@ -14,6 +13,35 @@ import Data.Map (Map)
 import Data.Text
 import GHC.Generics (Generic)
 import Utils
+
+type RequestId = Int
+
+data Request = Request
+  { id :: RequestId
+  , arguments :: Maybe Value
+  , command :: Text
+  }
+  deriving (Show)
+
+instance ToJSON Request where
+  toJSON (Request i margs command) =
+    case margs of
+      Just args ->
+        object
+          [ "seq" .= i
+          , "type" .= String "request"
+          , "command" .= command
+          , "arguments" .= args
+          ]
+      Nothing ->
+        object ["seq" .= i, "type" .= String "request", "command" .= command]
+
+instance FromJSON Request where
+  parseJSON = withObject "Request" $ \obj -> do
+    id <- obj .: "seq"
+    command <- obj .: "command"
+    arguments <- obj .:? "arguments"
+    pure $ Request {..}
 
 type HandlerM a = MaybeT IO a
 
@@ -52,7 +80,7 @@ data Checksum = Checksum
   { algorithm :: ChecksumAlgorithm
   , checksum :: Text
   }
-  deriving (Show, Generic, FromJSON)
+  deriving (Show, Generic, FromJSON, ToJSON)
 
 data Source = Source
   { name :: Maybe Text
@@ -64,12 +92,20 @@ data Source = Source
   , adapterData :: Maybe Value
   , checksums :: Maybe [Checksum]
   }
-  deriving (Show, Generic, FromJSON)
+  deriving (Show, Generic, FromJSON, ToJSON)
 
 data StackFrame = StackFrame
   { id :: Int
   , name :: Text
   , source :: Maybe Source
+  , line :: Int
+  , column :: Int
+  , endLine :: Maybe Int
+  , endColumn :: Maybe Int
+  , canRestart :: Maybe Bool
+  , instructionPointerReference :: Maybe Text
+  , moduleId :: Maybe Value
+  , presentationHint :: Maybe Text
   }
   deriving (Show, Generic, FromJSON)
 
@@ -207,6 +243,17 @@ data VariablesResponseBody = VariablesResponseBody
   }
   deriving (Show, Generic, FromJSON)
 
+data SetBreakpointsResponse = SetBreakpointsResponse
+  { breakpoints :: [Breakpoint]
+  }
+  deriving (Show, Generic, FromJSON)
+
+data SourceResponseBody = SourceResponseBody
+  { content :: Text
+  , mimeType :: Maybe Text
+  }
+  deriving (Show, Generic, FromJSON)
+
 data StoppedEventBody = StoppedEventBody
   { reason :: Text
   , description :: Maybe Text
@@ -215,5 +262,11 @@ data StoppedEventBody = StoppedEventBody
   , text :: Maybe Text
   , allThreadsStopped :: Maybe Bool
   , hitBreakpointIds :: Maybe [Int]
+  }
+  deriving (Show, Generic, FromJSON)
+
+data BreakpointEventBody = BreakpointEventBody
+  { reason :: Text
+  , breakpoint :: Breakpoint
   }
   deriving (Show, Generic, FromJSON)

@@ -4,6 +4,7 @@ import Control.Exception.Safe
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Aeson
 import Data.Aeson.Text qualified as Aeson
+import Data.Aeson.Types (parseMaybe)
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Lazy.Char8 qualified as BSL.Char8
 import Data.Foldable qualified as F
@@ -11,7 +12,6 @@ import Data.Foldable.WithIndex qualified as F
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TLE
 import Prettyprinter
-import Data.Aeson.Types (parseMaybe)
 
 rdrop :: String -> String -> String
 rdrop str = reverse . drop (length str) . reverse

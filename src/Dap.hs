@@ -70,7 +70,8 @@ handleMsg env session = forever $ do
     ResponseMsg response -> do
       putStrLn $ show session ++ ": Response to " ++ show response.command
       print response
-      callCallback session response.requestId response
+      when response.success
+        $ callCallback session response.requestId response
     EventMsg event -> do
       let eventType = event.event
       when (eventType /= "output" && eventType /= "loadedSource") $ do
@@ -86,8 +87,9 @@ setupEvents :: MonadIO m => DapEnv -> m ()
 setupEvents env = do
   on env "initialized" $ \(_, session) -> do
     let filePath = "/home/mahdi/tmp/app.js"
-    let handleSetBreakpointsResponse :: Session -> () -> HandlerM ()
-        handleSetBreakpointsResponse session _ = do
+    let handleSetBreakpointsResponse :: Session -> SetBreakpointsResponse -> HandlerM ()
+        handleSetBreakpointsResponse session body = do
+          atomically $ writeTVar env.breakpoints body.breakpoints
           sendRequest session makeSetExceptionBreakpointsRequest handleSetExceptionBreakpointsResponse
 
         handleSetExceptionBreakpointsResponse :: Session -> () -> HandlerM ()
@@ -111,13 +113,14 @@ setupEvents env = do
           let frames = body.stackFrames
           currentFrame <- hoistMaybe $ getTopFrame frames
           _thread <- getThread session threadId >>= throwNothing
-          requestScopes session currentFrame
+          -- requestScopes session currentFrame
           pure ()
 
     sendRequest session (makeStackTraceRequest threadId) handleStackTraceResponse
 
-  on env "breakpoint" \(_, _session) -> do
-    pure ()
+  on env "breakpoint" \(event, _session) -> do
+    body <- throwNothing event.body >>= throwNothing . fromJSONValue @BreakpointEventBody
+    atomically $ modifyTVar' env.breakpoints (fmap (\b -> if b.id == body.breakpoint.id then body.breakpoint else b))
 
   handleReverseRequest env "startDebugging" $ \request -> do
     args <- throwNothing request.arguments >>= throwNothing . fromJSONValue @StartDebuggingRequestArguments
@@ -126,14 +129,14 @@ setupEvents env = do
     let fullConfig = KeyMap.insert "request" requestType configuration
     initialize env (Object fullConfig)
 
-next :: MonadIO m => Session -> m ()
-next session = do
+next :: DapEnv -> (Session -> HandlerM ()) -> IO ()
+next env handler = do
+  session <- readTVarIO env.session >>= throwNothing
   threadsMap <- readTVarIO session.threads
   case listToMaybe $ Map.elems threadsMap of
     Nothing -> liftIO $ putStrLn "Stupid !!!"
     Just (ThreadState id _ _) -> do
-      sendRequest session (makeNextRequest id) (\_ () -> pure ())
-      pure ()
+      sendRequest session (makeNextRequest id) (\s () -> handler s)
 
 requestScopes :: MonadIO m => Session -> StackFrame -> m ()
 requestScopes session frame = do
@@ -148,7 +151,7 @@ requestScopes session frame = do
     handleVariableResponse :: Session -> VariablesResponseBody -> MaybeT IO ()
     handleVariableResponse _session body = do
       let variables = body.variables
-      pPrint variables
+      -- pPrint variables
       pure ()
 
 getTopFrame :: [StackFrame] -> Maybe StackFrame
