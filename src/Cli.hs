@@ -51,7 +51,11 @@ cli = do
       getLine >>= \case
         "n" -> do
           pPrintString "Starting Next..."
-          next env printVariables
+          next env (const $ pure ())
+
+          after env "stopped" "next" \(event, session) -> do
+            printVariables session
+            pure ()
           pPrintString "End of Next..."
           loop env
         "l" -> do
@@ -78,10 +82,10 @@ cli = do
       liftIO $ TIO.putStrLn aroundContent
       pure ()
 
-printVariables :: Session -> HandlerM ()
+printVariables :: Session -> IO ()
 printVariables session = do
   liftIO $ threadDelay 1_000_000
-  thread <- readTVarIO session.threads >>= hoistMaybe . listToMaybe . Map.elems
+  thread <- readTVarIO session.threads >>= throwNothing . listToMaybe . Map.elems
   sendRequest session (makeStackTraceRequest thread.id) handleStackTraceRes
   where
     handleStackTraceRes :: Session -> StackTraceResponseBody -> HandlerM ()

@@ -1,7 +1,7 @@
 module Dap.Env where
 
 import Control.Exception.Safe (MonadThrow)
-import Control.Monad (when)
+import Control.Monad (forM_, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Except
 import Dap.Event
@@ -17,6 +17,7 @@ import Data.Aeson.Types (Object)
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Lazy.Char8 qualified as BS.Char8
+import Data.List qualified as List
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Text (Text)
@@ -40,6 +41,7 @@ data DapEnv = DapEnv
   , nextSessionId :: !(TVar Int)
   , eventCallbacks :: !(TVar (Map Text EventCallback))
   , reverseRequestCallbacks :: !(TVar (Map Text ReverseRequestCallback))
+  , afterEventCallbacks :: !(TVar (Map (Text, Text) [EventCallback]))
   }
 
 newEnv :: MonadIO m => m DapEnv
@@ -47,9 +49,10 @@ newEnv = do
   envSession <- newTVarIO Nothing
   eventCallbacks <- newTVarIO mempty
   reverseRequestCallbacks <- newTVarIO mempty
+  afterEventCallbacks <- newTVarIO mempty
   bps <- newTVarIO []
   nextSessionIdVar <- newTVarIO 1
-  pure $ DapEnv envSession bps nextSessionIdVar eventCallbacks reverseRequestCallbacks
+  pure $ DapEnv envSession bps nextSessionIdVar eventCallbacks reverseRequestCallbacks afterEventCallbacks
 
 getNextSessionId :: MonadIO m => DapEnv -> m Int
 getNextSessionId env = do
@@ -59,15 +62,13 @@ getNextSessionId env = do
     writeTVar nextSessionIdVar (i + 1)
     pure i
 
--- addAfterEventCallback :: MonadIO m => DapEnv -> DapEventType -> (Session -> IO ()) -> m ()
--- addAfterEventCallback env eventType callback =
---   atomically $ modifyTVar' (env ^. afterEventCallbacks) (Map.insertWith (<>) eventType [callback])
---
--- callAfterEventCallbacks :: MonadIO m => DapEnv -> Session -> DapEventType -> m ()
--- callAfterEventCallbacks env session eventType = do
---   callMap <- readTVarIO (env ^. afterEventCallbacks)
---   case Map.lookup eventType callMap of
---     Just cs -> liftIO $ do
---       forM_ cs $ \c -> do
---         c session
---     Nothing -> pure ()
+after :: MonadIO m => DapEnv -> Text -> Text -> EventCallback -> m ()
+after env eventType name callback =
+  atomically $ modifyTVar' env.afterEventCallbacks (Map.insertWith (<>) (eventType, name) [callback])
+
+callAfterEventCallbacks :: MonadIO m => DapEnv -> Event -> Session -> Text -> m ()
+callAfterEventCallbacks env event session eventType = do
+  callMap <- readTVarIO env.afterEventCallbacks
+  let cs = concatMap snd $ List.filter (\((e, _), _) -> e == eventType) $ Map.assocs callMap
+  liftIO $ forM_ cs $ \c -> do
+    c (event, session)

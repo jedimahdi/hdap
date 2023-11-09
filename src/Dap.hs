@@ -78,6 +78,7 @@ handleMsg env session = forever $ do
         putStrLn $ show session ++ ": Event " ++ show eventType
         print event
       callEventCallback env session eventType event
+      callAfterEventCallbacks env event session eventType
     RequestMsg request -> do
       putStrLn $ show session ++ ": Reverse Request " ++ show request.command
       print request
