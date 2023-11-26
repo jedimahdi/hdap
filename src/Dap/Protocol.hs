@@ -2,7 +2,6 @@
 
 module Dap.Protocol where
 
-import Control.Exception.Safe
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Maybe
@@ -51,11 +50,12 @@ dapProtocolParser = do
   _ <- Parser.string "\r\n\r\n"
   bodyParser
 
-readLoop :: (MonadIO m, MonadThrow m) => Stream.Stream -> (Value -> m a) -> m b -> m b
-readLoop stream handleBody onNoChunk = do
+readLoop :: MonadIO m => IO Stream.Stream -> (Value -> m a) -> m b -> m b
+readLoop getStream handleBody onNoChunk = do
   loop
   where
     loop = do
+      stream <- liftIO getStream
       md <- liftIO $ parse stream dapProtocolParser
       case md of
         Nothing -> onNoChunk

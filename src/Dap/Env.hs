@@ -1,6 +1,5 @@
 module Dap.Env where
 
-import Control.Exception.Safe (MonadThrow)
 import Control.Monad (forM_, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Except

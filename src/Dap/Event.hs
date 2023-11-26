@@ -15,6 +15,8 @@ import Network.WebSockets.Stream qualified as Stream
 import System.FilePath (takeDirectory, takeFileName)
 import UnliftIO.STM
 import Utils
+import Prettyprinter
+import GHC.Generics (Generic)
 
 type EventId = Int
 
@@ -23,7 +25,9 @@ data Event = Event
   , event :: Text
   , body :: Maybe Value
   }
-  deriving (Show)
+  deriving (Show, Generic)
+
+deriving via ViaJSON Event instance Pretty Event
 
 instance FromJSON Event where
   parseJSON = withObject "Event" $ \obj -> do
@@ -31,3 +35,6 @@ instance FromJSON Event where
     event <- obj .: "event"
     body <- obj .:? "body"
     pure $ Event {..}
+
+instance ToJSON Event where
+  toJSON = genericToJSON dapOptions

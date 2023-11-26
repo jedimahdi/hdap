@@ -1,6 +1,5 @@
 module Utils where
 
-import Control.Exception.Safe
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Aeson
 import Data.Aeson.Text qualified as Aeson
@@ -13,6 +12,7 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TLE
 import GHC.Stack (HasCallStack)
 import Prettyprinter
+import UnliftIO
 
 rdrop :: String -> String -> String
 rdrop str = reverse . drop (length str) . reverse
@@ -24,11 +24,11 @@ addContentLength s =
     <> "\r\n\r\n"
     <> s
 
-throwLeft :: MonadThrow m => Either String b -> m b
+throwLeft :: MonadIO m => Either String b -> m b
 throwLeft (Left s) = throwString s
 throwLeft (Right x) = pure x
 
-throwNothing :: (HasCallStack, MonadThrow m) => Maybe a -> m a
+throwNothing :: (HasCallStack) => Maybe a -> IO a
 throwNothing Nothing = throwString "Value was Nothing."
 throwNothing (Just x) = pure x
 
@@ -50,6 +50,14 @@ prettyJSON = \case
      in group $ nest 2 ("{" <> line <> vsep (punctuate separator docs)) <> line <> "}"
   -- for atomic objects, piggyback off aeson's encoding
   v -> pretty $ Aeson.encodeToLazyText v
+
+newtype ViaJSON a = ViaJSON a
+
+instance ToJSON a => Pretty (ViaJSON a) where
+  pretty (ViaJSON a) = prettyJSON $ toJSON a
+
+dapOptions :: Options
+dapOptions = defaultOptions {omitNothingFields = True}
 
 str2lbs :: String -> BSL.ByteString
 str2lbs = TLE.encodeUtf8 . TL.pack

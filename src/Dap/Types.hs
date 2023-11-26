@@ -12,6 +12,7 @@ import Data.Aeson.TH
 import Data.Map (Map)
 import Data.Text
 import GHC.Generics (Generic)
+import Prettyprinter
 import Utils
 
 type RequestId = Int
@@ -22,6 +23,8 @@ data Request = Request
   , command :: Text
   }
   deriving (Show)
+
+deriving via ViaJSON Request instance Pretty Request
 
 instance ToJSON Request where
   toJSON (Request i margs command) =
@@ -48,6 +51,8 @@ type HandlerM a = MaybeT IO a
 data MsgIn = EventMsg Event | RequestMsg Request | ResponseMsg Response
   deriving (Show)
 
+deriving via ViaJSON MsgIn instance Pretty MsgIn
+
 instance FromJSON MsgIn where
   parseJSON = withObject "MsgIn" $ \obj -> do
     msgType :: Text <- obj .: "type"
@@ -56,6 +61,11 @@ instance FromJSON MsgIn where
       "request" -> RequestMsg <$> parseJSON (Object obj)
       "response" -> ResponseMsg <$> parseJSON (Object obj)
       _ -> fail "Parsing MsgIn failed: wrong msg type"
+
+instance ToJSON MsgIn where
+  toJSON (EventMsg msg) = toJSON msg
+  toJSON (RequestMsg msg) = toJSON msg
+  toJSON (ResponseMsg msg) = toJSON msg
 
 type MsgOut = Request
 
@@ -213,7 +223,7 @@ data Thread = Thread
   deriving (Show, Generic, FromJSON)
 
 data StartDebuggingRequestArguments = StartDebuggingRequestArguments
-  { configuration :: KeyMap Value
+  { configuration :: Object
   , request :: Text
   }
   deriving (Show, Generic, FromJSON)
@@ -253,6 +263,8 @@ data SourceResponseBody = SourceResponseBody
   , mimeType :: Maybe Text
   }
   deriving (Show, Generic, FromJSON)
+
+type InitializeResponseBody = Maybe Capabilities
 
 data StoppedEventBody = StoppedEventBody
   { reason :: Text

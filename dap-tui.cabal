@@ -31,6 +31,7 @@ library
                       Dap.MsgOut
                       Dap.Types
                       Dap.Env
+                      Dap.Connection
     build-depends:    base
                     , network-simple
                     , network
@@ -50,14 +51,14 @@ library
                     , scientific
                     , filepath
                     , pretty-simple
-                    , safe-exceptions
                     , word8
                     , prettyprinter
                     , indexed-traversable
                     , websockets
+                    , co-log-core
     hs-source-dirs:   src
     default-language: GHC2021
-    ghc-options: -Wall -Wno-unused-imports -Wno-missing-export-lists -Wno-name-shadowing
+    ghc-options: -Wall -Wno-unused-imports -Wno-missing-export-lists -Wno-name-shadowing -Wno-unused-local-binds -Wno-unused-matches
   default-extensions:  BangPatterns
                        ConstraintKinds
                        DataKinds
