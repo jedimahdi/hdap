@@ -28,7 +28,7 @@ throwLeft :: MonadIO m => Either String b -> m b
 throwLeft (Left s) = throwString s
 throwLeft (Right x) = pure x
 
-throwNothing :: (HasCallStack) => Maybe a -> IO a
+throwNothing :: HasCallStack => Maybe a -> IO a
 throwNothing Nothing = throwString "Value was Nothing."
 throwNothing (Just x) = pure x
 

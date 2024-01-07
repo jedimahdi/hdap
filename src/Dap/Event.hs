@@ -11,12 +11,12 @@ import Data.Attoparsec.ByteString.Lazy (Parser)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector qualified as Vector
+import GHC.Generics (Generic)
 import Network.WebSockets.Stream qualified as Stream
+import Prettyprinter
 import System.FilePath (takeDirectory, takeFileName)
 import UnliftIO.STM
 import Utils
-import Prettyprinter
-import GHC.Generics (Generic)
 
 type EventId = Int
 

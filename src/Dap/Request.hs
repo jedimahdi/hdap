@@ -120,8 +120,8 @@ makeSetBreakpointsRequest path breakpoints = makeRequest "setBreakpoints" argume
       object
         [
           ( "source"
-          , Object
-              $ KeyMap.fromList
+          , Object $
+              KeyMap.fromList
                 [ ("path", String path)
                 , ("name", String $ T.pack $ takeFileName (T.unpack path))
                 ]
@@ -131,8 +131,8 @@ makeSetBreakpointsRequest path breakpoints = makeRequest "setBreakpoints" argume
           ( "breakpoints"
           , Array
               ( ( \line ->
-                    Object
-                      $ KeyMap.fromList
+                    Object $
+                      KeyMap.fromList
                         [ ("line", Number (fromIntegral line))
                         ]
                 )

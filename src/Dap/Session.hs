@@ -30,6 +30,7 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Lazy.Char8 qualified as BS.Char8
 import Data.Foldable (traverse_)
+import Data.IORef
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Text (Text)
@@ -42,10 +43,9 @@ import Network.WebSockets.Stream (Stream)
 import Network.WebSockets.Stream qualified as Stream
 import Prettyprinter
 import System.FilePath (takeDirectory, takeFileName)
+import Text.Pretty.Simple
 import Utils (addContentLength, fromJSONValue, printJSON, throwNothing)
 import Prelude hiding (seq)
-import Text.Pretty.Simple
-import Data.IORef
 
 data DapClientLog
   = Starting

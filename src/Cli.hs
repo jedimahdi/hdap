@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
 {-# HLINT ignore "Use <$>" #-}
+{-# HLINT ignore "Redundant id" #-}
 module Cli where
 
 import Control.Concurrent
@@ -113,7 +114,6 @@ cli2 = do
   -- initialize env args
   -- loop env
   pure ()
-  where
 
 -- loop env = do
 --   getLine >>= \case

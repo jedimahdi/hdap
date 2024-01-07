@@ -24,7 +24,7 @@ socketConnection :: TCP.Socket -> IO Connection
 socketConnection socket = do
   makeConnection
     (recv socket 8192)
-    (TCP.send socket )
+    (TCP.send socket)
     (TCP.closeSock socket)
 
 openSocketConnection :: TCP.HostName -> TCP.ServiceName -> IO Connection

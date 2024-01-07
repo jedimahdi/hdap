@@ -1,6 +1,6 @@
 module Main where
 
-import qualified Cli
+import Cli qualified
 
 main = do
-    Cli.cli
+  Cli.cli
