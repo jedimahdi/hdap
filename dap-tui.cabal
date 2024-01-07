@@ -1,109 +1,108 @@
 cabal-version:      2.4
-name:               dap-tui
+name:               hdap
 version:            0.1.0.0
 synopsis:
-
--- A longer description of the package.
--- description:
+description:        DAP client
 homepage:
-
--- A URL where users can report bugs.
--- bug-reports:
-license:            NONE
+license:
 author:             Mahdi Seyedan
 maintainer:         mahdi.se@yahoo.com
-
--- A copyright notice.
--- copyright:
 category:           Development
 extra-source-files: CHANGELOG.md
 
 library
-    exposed-modules:  Cli
-                      Utils
-                      Dap
-                      Dap.Session
-                      Dap.Protocol
-                      Dap.Request
-                      Dap.Response
-                      Dap.Event
-                      Dap.MsgIn
-                      Dap.MsgOut
-                      Dap.Types
-                      Dap.Env
-                      Dap.Connection
-    build-depends:    base
-                    , network-simple
-                    , network
-                    , text
-                    , bytestring
-                    , containers
-                    , aeson
-                    , process
-                    , attoparsec
-                    , attoparsec-aeson
-                    , case-insensitive
-                    , transformers >= 0.6.0.6
-                    , async
-                    , unliftio
-                    , vector
-                    , stm
-                    , scientific
-                    , filepath
-                    , pretty-simple
-                    , word8
-                    , prettyprinter
-                    , indexed-traversable
-                    , websockets
-                    , co-log-core
-    hs-source-dirs:   src
-    default-language: GHC2021
-    ghc-options: -Wall -Wno-unused-imports -Wno-missing-export-lists -Wno-name-shadowing -Wno-unused-local-binds -Wno-unused-matches
-  default-extensions:  BangPatterns
-                       ConstraintKinds
-                       DataKinds
-                       DeriveGeneric
-                       DerivingStrategies
-                       DerivingVia
-                       FlexibleContexts
-                       FlexibleInstances
-                       GeneralizedNewtypeDeriving
-                       InstanceSigs
-                       KindSignatures
-                       LambdaCase
-                       MultiParamTypeClasses
-                       OverloadedStrings
-                       OverloadedLabels
-                       OverloadedRecordDot
-                       RecordWildCards
-                       ScopedTypeVariables
-                       TypeApplications
-                       TypeFamilies
-                       TypeOperators
-                       GADTs
-                       ViewPatterns
-                       PatternSynonyms
-                       BlockArguments
-                       RankNTypes
-                       StandaloneDeriving
-                       NamedFieldPuns
-                       DeriveAnyClass
-                       DuplicateRecordFields
-                        
+  exposed-modules:
+    Cli
+    Dap
+    Dap.Connection
+    Dap.Env
+    Dap.Event
+    Dap.MsgIn
+    Dap.MsgOut
+    Dap.Protocol
+    Dap.Request
+    Dap.Response
+    Dap.Session
+    Dap.Types
+    Utils
 
-executable dap-tui
-    main-is:          Main.hs
-    build-depends:
-        base ^>=4.16.4.0,
-        dap-tui
+  build-depends:
+    , aeson
+    , async
+    , attoparsec
+    , attoparsec-aeson
+    , base
+    , bytestring
+    , case-insensitive
+    , co-log-core
+    , containers
+    , filepath
+    , indexed-traversable
+    , network
+    , network-simple
+    , pretty-simple
+    , prettyprinter
+    , process
+    , scientific
+    , stm
+    , text
+    , transformers
+    , unliftio
+    , vector
+    , websockets
+    , word8
 
-    ghc-options: -threaded
-    hs-source-dirs:   app
-    default-language: GHC2021
+  hs-source-dirs:     src
+  default-language:   GHC2021
+  ghc-options:
+    -Wall -Wno-unused-imports -Wno-missing-export-lists
+    -Wno-name-shadowing -Wno-unused-local-binds -Wno-unused-matches
 
-test-suite dap-tui-test
-    default-language: GHC2021
-    type:             exitcode-stdio-1.0
-    hs-source-dirs:   test
-    main-is:          MyLibTest.hs
-    build-depends:    base ^>=4.16.4.0
+  default-extensions:
+    BangPatterns
+    BlockArguments
+    ConstraintKinds
+    DataKinds
+    DeriveAnyClass
+    DeriveGeneric
+    DerivingStrategies
+    DerivingVia
+    DuplicateRecordFields
+    FlexibleContexts
+    FlexibleInstances
+    GADTs
+    GeneralizedNewtypeDeriving
+    InstanceSigs
+    KindSignatures
+    LambdaCase
+    MultiParamTypeClasses
+    NamedFieldPuns
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+    PatternSynonyms
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StandaloneDeriving
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    ViewPatterns
+
+executable hdap
+  main-is:          Main.hs
+  build-depends:
+    , base
+    , hdap
+
+  ghc-options:      -threaded
+  hs-source-dirs:   app
+  default-language: GHC2021
+
+test-suite hdap-test
+  default-language: GHC2021
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          MyLibTest.hs
+  build-depends:    base

@@ -43,7 +43,6 @@ import Utils
 
 initialize :: Value -> IO Session
 initialize args = do
-  newTChan
   (socket, remoteAddr) <- TCP.connectSock "localhost" "8123"
   putStrLn $ "Connection established to " ++ show remoteAddr ++ " Socket: " ++ show socket
   session <- newSession logger socket
@@ -76,19 +75,18 @@ startDebugging session = do
       writeIORef session.isLaunched True
       pure (newSession, startDebuggingArgs)
 
-
-
 continue :: Session -> IO ()
 continue session = do
   pure ()
-  -- isLaunched <- readIORef session.isLaunched
-  -- if isLaunched
-  --   then do
-  --     putStrLn "Not implemented yet!!1"
-  --     pure Nothing
-  --   else launch
-  -- where
-  --   launch = do
+
+-- isLaunched <- readIORef session.isLaunched
+-- if isLaunched
+--   then do
+--     putStrLn "Not implemented yet!!1"
+--     pure Nothing
+--   else launch
+-- where
+--   launch = do
 
 setBreakpoint :: Session -> Text -> [Int] -> IO ()
 setBreakpoint session filePath bps = do

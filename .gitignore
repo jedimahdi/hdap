@@ -1,3 +1,5 @@
 dist-newstyle
 res.json
 tags
+.pre-commit-config.yaml
+cabal.project.local

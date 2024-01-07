@@ -1,5 +1,5 @@
 # Generated from web app, for more information, see: https://fourmolu.github.io/config/
-indentation: 4
+indentation: 2
 column-limit: none
 function-arrows: leading
 comma-style: leading
